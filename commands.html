@@ -7,11 +7,25 @@
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 
   <script>
+    function onNewMessageComposeHandler(event) {
+      Office.context.mailbox.item.subject.setAsync(
+        "TARIFAST EVENT RUNTIME WORKS",
+        function () {
+          event.completed();
+        }
+      );
+    }
+
     function onMessageSendHandler(event) {
       event.completed({
         allowEvent: true
       });
     }
+
+    Office.actions.associate(
+      "onNewMessageComposeHandler",
+      onNewMessageComposeHandler
+    );
 
     Office.actions.associate(
       "onMessageSendHandler",
