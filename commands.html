@@ -6,12 +6,18 @@
 
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 
-  <script
-    type="text/javascript"
-    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20260924-2005">
+  <script>
+    function onMessageSendHandler(event) {
+      event.completed({
+        allowEvent: true
+      });
+    }
+
+    Office.actions.associate(
+      "onMessageSendHandler",
+      onMessageSendHandler
+    );
   </script>
 </head>
-
-<body>
-</body>
+<body></body>
 </html>
