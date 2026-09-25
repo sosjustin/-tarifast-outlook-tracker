@@ -10,8 +10,11 @@
     function onNewMessageComposeHandler(event) {
       Office.context.mailbox.item.subject.setAsync(
         "TARIFAST EVENT RUNTIME WORKS",
-        function () {
-          event.completed();
+        {
+          asyncContext: event
+        },
+        function (asyncResult) {
+          asyncResult.asyncContext.completed();
         }
       );
     }
@@ -33,5 +36,6 @@
     );
   </script>
 </head>
+
 <body></body>
 </html>
