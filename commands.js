@@ -1,10 +1,14 @@
-function onMessageSendHandler(event) {
-  event.completed({
-    allowEvent: true
-  });
-}
+Office.onReady(() => {
 
-Office.actions.associate(
-  "onMessageSendHandler",
-  onMessageSendHandler
-);
+  function onMessageSendHandler(event) {
+    event.completed({
+      allowEvent: true
+    });
+  }
+
+  Office.actions.associate(
+    "onMessageSendHandler",
+    onMessageSendHandler
+  );
+
+});
