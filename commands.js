@@ -1,15 +1,16 @@
 const TRACKING_CREATE_URL =
   "https://www.tarifastops.com/_functions/emailTrackingCreate";
 
-const TRACKING_SESSION_KEY = "tarifastEmailTrackingPixelUrl";
+const TRACKING_SESSION_KEY =
+  "tarifastEmailTrackingPixelUrl";
 
 
 /* =========================================================
    SEND HANDLER
 
    IMPORTANT:
-   This intentionally preserves the working fail-open behavior.
-   Email sending is never dependent on tracking succeeding.
+   This preserves the proven fail-open behavior.
+   Tracking never determines whether the email can send.
 ========================================================= */
 
 function onMessageSendHandler(event) {
@@ -20,13 +21,16 @@ function onMessageSendHandler(event) {
 
 
 /* =========================================================
-   SMALL PROMISE WRAPPERS FOR OFFICE.JS
+   OFFICE.JS PROMISE WRAPPERS
 ========================================================= */
 
 function officeGetAsync(target) {
   return new Promise((resolve, reject) => {
     target.getAsync((result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
+      if (
+        result.status ===
+        Office.AsyncResultStatus.Succeeded
+      ) {
         resolve(result.value);
       } else {
         reject(
@@ -39,20 +43,49 @@ function officeGetAsync(target) {
 }
 
 
-function sessionGetAsync(sessionData, key) {
-  return new Promise((resolve) => {
-    sessionData.getAsync(key, (result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve(result.value || "");
+function bodyGetTypeAsync(body) {
+  return new Promise((resolve, reject) => {
+    body.getTypeAsync((result) => {
+      if (
+        result.status ===
+        Office.AsyncResultStatus.Succeeded
+      ) {
+        resolve(result.value);
       } else {
-        resolve("");
+        reject(
+          result.error ||
+          new Error("body.getTypeAsync failed")
+        );
       }
     });
   });
 }
 
 
-function sessionSetAsync(sessionData, key, value) {
+function sessionGetAsync(sessionData, key) {
+  return new Promise((resolve) => {
+    sessionData.getAsync(
+      key,
+      (result) => {
+        if (
+          result.status ===
+          Office.AsyncResultStatus.Succeeded
+        ) {
+          resolve(result.value || "");
+        } else {
+          resolve("");
+        }
+      }
+    );
+  });
+}
+
+
+function sessionSetAsync(
+  sessionData,
+  key,
+  value
+) {
   return new Promise((resolve) => {
     sessionData.setAsync(
       key,
@@ -63,12 +96,16 @@ function sessionSetAsync(sessionData, key, value) {
 }
 
 
-function appendOnSendAsync(body, html) {
+function appendOnSendAsync(
+  body,
+  content,
+  coercionType
+) {
   return new Promise((resolve, reject) => {
     body.appendOnSendAsync(
-      html,
+      content,
       {
-        coercionType: Office.CoercionType.Html
+        coercionType
       },
       (result) => {
         if (
@@ -79,7 +116,9 @@ function appendOnSendAsync(body, html) {
         } else {
           reject(
             result.error ||
-            new Error("appendOnSendAsync failed")
+            new Error(
+              "appendOnSendAsync failed"
+            )
           );
         }
       }
@@ -100,7 +139,8 @@ function firstRecipient(recipients) {
     return null;
   }
 
-  const recipient = recipients[0] || {};
+  const recipient =
+    recipients[0] || {};
 
   const email = String(
     recipient.emailAddress || ""
@@ -112,6 +152,7 @@ function firstRecipient(recipients) {
 
   return {
     email,
+
     name: String(
       recipient.displayName || ""
     ).trim()
@@ -121,16 +162,15 @@ function firstRecipient(recipients) {
 
 /* =========================================================
    CLIENT-SIDE MESSAGE ID
-
-   Outlook does not necessarily have its final internet
-   Message-ID while the message is still being composed.
 ========================================================= */
 
 function makeClientMessageId() {
   return [
     "tarifast",
     Date.now().toString(36),
-    Math.random().toString(36).slice(2, 12)
+    Math.random()
+      .toString(36)
+      .slice(2, 12)
   ].join("-");
 }
 
@@ -149,38 +189,49 @@ async function createTrackingRecord(
       ? new AbortController()
       : null;
 
-  const timeoutId = setTimeout(() => {
-    if (controller) {
-      controller.abort();
-    }
-  }, 5000);
+  const timeoutId =
+    setTimeout(() => {
+      if (controller) {
+        controller.abort();
+      }
+    }, 5000);
 
   try {
 
-    const response = await fetch(
-      TRACKING_CREATE_URL,
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        TRACKING_CREATE_URL,
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json"
-        },
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-        body: JSON.stringify({
-          recipientEmail: recipient.email,
-          recipientName: recipient.name,
-          company: "",
-          subject: String(
-            subject || ""
-          ).trim(),
-          messageId: makeClientMessageId()
-        }),
+          body: JSON.stringify({
+            recipientEmail:
+              recipient.email,
 
-        signal: controller
-          ? controller.signal
-          : undefined
-      }
-    );
+            recipientName:
+              recipient.name,
+
+            company: "",
+
+            subject:
+              String(
+                subject || ""
+              ).trim(),
+
+            messageId:
+              makeClientMessageId()
+          }),
+
+          signal: controller
+            ? controller.signal
+            : undefined
+        }
+      );
 
 
     if (!response.ok) {
@@ -205,11 +256,15 @@ async function createTrackingRecord(
     }
 
 
-    return String(data.pixelUrl);
+    return String(
+      data.pixelUrl
+    );
 
   } finally {
 
-    clearTimeout(timeoutId);
+    clearTimeout(
+      timeoutId
+    );
 
   }
 }
@@ -218,12 +273,10 @@ async function createTrackingRecord(
 /* =========================================================
    RECIPIENT CHANGE EVENT
 
-   This prepares the tracking pixel while the email is being
+   Prepares the tracking pixel while the message is being
    composed.
 
-   It does NOT control whether the email can be sent.
-
-   Any failure simply exits and completes the event.
+   FAILURE HERE NEVER PREVENTS SENDING.
 ========================================================= */
 
 async function onMessageRecipientsChangedHandler(
@@ -242,7 +295,11 @@ async function onMessageRecipientsChangedHandler(
       !item.subject ||
       !item.body ||
       !item.sessionData ||
-      typeof item.body.appendOnSendAsync !==
+      typeof item.body
+        .appendOnSendAsync !==
+        "function" ||
+      typeof item.body
+        .getTypeAsync !==
         "function"
     ) {
       return;
@@ -250,8 +307,8 @@ async function onMessageRecipientsChangedHandler(
 
 
     /*
-     * Do not create multiple tracking records for the same
-     * compose session if Outlook fires this event repeatedly.
+     * Prevent duplicate tracking records within the same
+     * compose session.
      */
 
     const existingPixelUrl =
@@ -288,8 +345,21 @@ async function onMessageRecipientsChangedHandler(
 
 
     /*
-     * Subject is useful metadata but is not required for
-     * tracking. If Outlook cannot return it, continue anyway.
+     * Get the actual Outlook body format.
+     *
+     * Microsoft recommends passing this value directly
+     * into appendOnSendAsync.
+     */
+
+    const bodyFormat =
+      await bodyGetTypeAsync(
+        item.body
+      );
+
+
+    /*
+     * Subject is metadata only.
+     * Tracking can still continue if Outlook cannot return it.
      */
 
     let subject = "";
@@ -310,7 +380,7 @@ async function onMessageRecipientsChangedHandler(
 
 
     /*
-     * Create the tracking record.
+     * Create the tracking record in Wix.
      */
 
     const pixelUrl =
@@ -321,36 +391,56 @@ async function onMessageRecipientsChangedHandler(
 
 
     /*
-     * Build an invisible 1x1 tracking image.
+     * Build content appropriate for the Outlook body format.
      */
 
-    const safePixelUrl =
-      pixelUrl
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;");
+    let trackingContent;
 
 
-    const pixelHtml =
-      '<img src="' +
-      safePixelUrl +
-      '" width="1" height="1" alt="" ' +
-      'style="width:1px;height:1px;border:0;margin:0;padding:0;" />';
+    if (
+      bodyFormat ===
+      Office.CoercionType.Html
+    ) {
+
+      const safePixelUrl =
+        pixelUrl
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;");
+
+
+      trackingContent =
+        '<img src="' +
+        safePixelUrl +
+        '" width="1" height="1" alt="" />';
+
+    } else {
+
+      /*
+       * A tracking pixel cannot operate inside a plain-text
+       * message. Exit without affecting the message.
+       */
+
+      return;
+
+    }
 
 
     /*
-     * Tell Outlook to append the pixel when the message
-     * actually sends.
+     * Register the pixel with Outlook.
+     *
+     * Outlook inserts it when the message is actually sent.
      */
 
     await appendOnSendAsync(
       item.body,
-      pixelHtml
+      trackingContent,
+      bodyFormat
     );
 
 
     /*
-     * Mark this compose session as prepared so repeated
-     * recipient-change events do not create duplicate records.
+     * Remember that this compose session has already been
+     * prepared.
      */
 
     await sessionSetAsync(
@@ -365,8 +455,8 @@ async function onMessageRecipientsChangedHandler(
     /*
      * FAIL OPEN.
      *
-     * Tracking failure must NEVER interfere with composing
-     * or sending an email.
+     * Any tracking error is deliberately ignored.
+     * Sending remains independent from tracking.
      */
 
   } finally {
