@@ -1,31 +1,41 @@
 /* ============================================================
    TARIFAST EMAIL TRACKER
-   MINIMAL EVENT ACTIVATION TEST
+   VERSION 9 CONTROL TEST
 
    PURPOSE:
-   Prove whether Outlook actually invokes
-   OnMessageRecipientsChanged.
+   Prove Microsoft's OnMessageRecipientsChanged event
+   actually invokes the registered JavaScript handler.
 
-   IMPORTANT:
-   - No OnMessageSend
-   - No appendOnSendAsync
-   - No sessionData
-   - No startup diagnostics
-   - No production tracking logic
-   - Nothing here can block Send
+   NO PRODUCTION TRACKING LOGIC IS PRESENT IN THIS TEST.
 ============================================================ */
+
+
+const TRACKING_CREATE_URL =
+  "https://www.tarifastops.com/_functions/emailTrackingCreate";
 
 
 /* ============================================================
-   RECIPIENT CHANGE EVENT
+   RECIPIENT CHANGE HANDLER
+
+   IMPORTANT:
+   The function name is intentionally NEW for v9.
+
+   Manifest:
+     tarifastV9RecipientsChanged
+
+   JavaScript association:
+     tarifastV9RecipientsChanged
+
+   This eliminates any ambiguity involving the old cached
+   handler name used by v8.
 ============================================================ */
 
-function onMessageRecipientsChangedHandler(event) {
+function tarifastV9RecipientsChanged(event) {
 
   try {
 
     fetch(
-      "https://www.tarifastops.com/_functions/emailTrackingCreate",
+      TRACKING_CREATE_URL,
       {
         method: "POST",
 
@@ -39,16 +49,16 @@ function onMessageRecipientsChangedHandler(event) {
             "jlesperance@tarifastops.com",
 
           recipientName:
-            "EVENT HANDLER TEST",
+            "TARIFAST V9 EVENT CONTROL",
 
           company:
             "Tarifast",
 
           subject:
-            "HANDLER_ACTUALLY_FIRED",
+            "V9_HANDLER_ACTUALLY_FIRED",
 
           messageId:
-            "handler-test-" +
+            "v9-handler-" +
             Date.now()
 
         })
@@ -59,22 +69,15 @@ function onMessageRecipientsChangedHandler(event) {
     .catch(function () {
 
       /*
-       * Diagnostic request failure is ignored.
-       * It must never interfere with Outlook.
+       * Never allow diagnostic failure to affect Outlook.
        */
 
     })
 
-    .finally(function () {
-
-      /*
-       * Always tell Outlook the event is complete.
-       */
+    .then(function () {
 
       try {
-
         event.completed();
-
       } catch (_) {}
 
     });
@@ -83,16 +86,11 @@ function onMessageRecipientsChangedHandler(event) {
   } catch (_) {
 
     /*
-     * Absolute fail-open protection.
-     *
-     * Even an unexpected JavaScript error must not
-     * interfere with Outlook.
+     * Absolute fail-open.
      */
 
     try {
-
       event.completed();
-
     } catch (_) {}
 
   }
@@ -101,15 +99,12 @@ function onMessageRecipientsChangedHandler(event) {
 
 
 /* ============================================================
-   REGISTER EVENT HANDLER
+   MICROSOFT EVENT ASSOCIATION
 
-   This name MUST exactly match the FunctionName declared
-   by the v8 manifest:
-
-   onMessageRecipientsChangedHandler
+   This name MUST exactly match FunctionName in manifest v9.
 ============================================================ */
 
 Office.actions.associate(
-  "onMessageRecipientsChangedHandler",
-  onMessageRecipientsChangedHandler
+  "tarifastV9RecipientsChanged",
+  tarifastV9RecipientsChanged
 );
