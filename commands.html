@@ -7,19 +7,26 @@
 
   <title>Tarifast Email Tracker</title>
 
-  <!--
-    Outlook on the web, new Outlook, and new Mac Outlook
-    use this HTML page as the event runtime.
-  -->
-
   <script
     type="text/javascript"
     src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
   </script>
 
-  <script
-    type="text/javascript"
-    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-v9">
+  <script type="text/javascript">
+
+    Office.onReady(function () {
+
+      var script = document.createElement("script");
+
+      script.type = "text/javascript";
+
+      script.src =
+        "https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-v9-minimal-2";
+
+      document.head.appendChild(script);
+
+    });
+
   </script>
 
 </head>
