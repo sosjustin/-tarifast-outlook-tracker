@@ -6,19 +6,65 @@
 
   <title>Tarifast Email Tracker</title>
 
+  <script>
+    /*
+     * TEMPORARY DIAGNOSTIC
+     *
+     * This executes as soon as commands.html itself loads.
+     * It does NOT depend on Office.js, commands.js,
+     * Office.actions.associate, or the recipient handler.
+     */
+
+    (function () {
+      try {
+        fetch(
+          "https://www.tarifastops.com/_functions/emailTrackingCreate",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+              recipientEmail:
+                "jlesperance@tarifastops.com",
+
+              recipientName:
+                "OUTLOOK HTML RUNTIME DIAGNOSTIC",
+
+              company:
+                "Tarifast",
+
+              subject:
+                "OUTLOOK_HTML_RUNTIME_LOADED",
+
+              messageId:
+                "html-runtime-" + Date.now()
+            })
+          }
+        ).catch(function () {
+          // Diagnostic must never interfere with Outlook.
+        });
+
+      } catch (_) {
+        // Diagnostic must never interfere with Outlook.
+      }
+    })();
+  </script>
+
+
   <script
     type="text/javascript"
     src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
   </script>
 
-  <script type="text/javascript">
-    Office.initialize = function () {};
-  </script>
 
   <script
     type="text/javascript"
     src="commands.js">
   </script>
+
 </head>
 
 <body>
