@@ -6,6 +6,12 @@ Office.initialize = function () {};
 
 function tarifastV9RecipientsChanged(event) {
   try {
+    console.log("Tarifast recipient event fired");
+  } catch (_) {
+    // A logging failure must not prevent event completion.
+  }
+
+  try {
     event.completed();
   } catch (_) {
     // Preserve the existing minimal test's behavior.
