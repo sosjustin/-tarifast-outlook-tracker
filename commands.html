@@ -3,69 +3,27 @@
 
 <head>
   <meta charset="UTF-8" />
-
-  <meta
-    http-equiv="X-UA-Compatible"
-    content="IE=Edge"
-  />
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
 
   <title>Tarifast Email Tracker</title>
 
-
-  <!-- =====================================================
-       MICROSOFT OFFICE JAVASCRIPT API
-
-       Must load before commands.js so Office.actions is
-       available when the event handler is registered.
-  ====================================================== -->
+  <!--
+    Outlook on the web, new Outlook, and new Mac Outlook
+    use this HTML page as the event runtime.
+  -->
 
   <script
     type="text/javascript"
     src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
   </script>
 
-
-  <!-- =====================================================
-       TARIFAST OUTLOOK EVENT RUNTIME
-
-       Absolute GitHub Pages URL.
-
-       Version query prevents Outlook from reusing an older
-       cached copy of commands.js while we validate the
-       recipient-change event.
-  ====================================================== -->
-
   <script
     type="text/javascript"
-    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-1130">
+    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-v9">
   </script>
 
 </head>
 
-
-<body>
-
-  <!--
-    Event-based Outlook runtime.
-
-    No visible UI is required.
-
-    The v8 manifest launches this runtime for:
-
-        OnMessageRecipientsChanged
-
-    commands.js registers:
-
-        onMessageRecipientsChangedHandler
-
-    There is deliberately NO OnMessageSend runtime here.
-  -->
-
-</body>
+<body></body>
 
 </html>
