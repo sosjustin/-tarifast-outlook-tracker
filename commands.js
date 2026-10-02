@@ -2,19 +2,27 @@
  * Match the Office initialization used by Microsoft's external-recipient sample.
  * Keep event association outside initialization for classic Outlook on Windows.
  */
-Office.initialize = function () {};
+function tarifastDiagnostic(message) {
+  try {
+    console.log("Tarifast diagnostic v2: " + message);
+  } catch (_) {
+    // Diagnostics must never interrupt event handling.
+  }
+}
+
+tarifastDiagnostic("1 - script executing");
+
+Office.initialize = function () {
+  tarifastDiagnostic("3 - Office initialization callback reached");
+};
 
 function tarifastV9RecipientsChanged(event) {
-  try {
-    console.log("Tarifast recipient event fired");
-  } catch (_) {
-    // A logging failure must not prevent event completion.
-  }
+  tarifastDiagnostic("4 - recipient event fired");
 
   try {
     event.completed();
   } catch (_) {
-    // Preserve the existing minimal test's behavior.
+    tarifastDiagnostic("event.completed threw an error");
   }
 }
 
@@ -22,3 +30,4 @@ Office.actions.associate(
   "tarifastV9RecipientsChanged",
   tarifastV9RecipientsChanged
 );
+tarifastDiagnostic("2 - handler association returned");
