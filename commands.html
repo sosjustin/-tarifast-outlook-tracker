@@ -1,8 +1,8 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
 
   <title>Tarifast Email Tracker</title>
 
@@ -12,89 +12,11 @@
     src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
   </script>
 
-  <script>
-    /*
-     * TEMPORARY RUNTIME DIAGNOSTIC
-     *
-     * Confirms commands.html loaded.
-     */
-    (function () {
-      try {
-        fetch(
-          "https://www.tarifastops.com/_functions/emailTrackingCreate",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              recipientEmail:
-                "jlesperance@tarifastops.com",
-
-              recipientName:
-                "OUTLOOK HTML RUNTIME DIAGNOSTIC",
-
-              company:
-                "Tarifast",
-
-              subject:
-                "OUTLOOK_HTML_RUNTIME_LOADED",
-
-              messageId:
-                "html-runtime-" + Date.now()
-            })
-          }
-        ).catch(function () {});
-      } catch (_) {}
-    })();
-
-
-    /*
-     * Wait until Office.js has actually exposed
-     * Office.actions before loading commands.js.
-     *
-     * We are NOT using Office.onReady() because event-based
-     * activation shouldn't depend on Office.onReady().
-     */
-    (function waitForOfficeActions() {
-
-      if (
-        typeof Office !== "undefined" &&
-        Office.actions &&
-        typeof Office.actions.associate === "function"
-      ) {
-
-        var script =
-          document.createElement("script");
-
-        script.type =
-          "text/javascript";
-
-        script.src =
-          "https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-1120";
-
-        document.head.appendChild(
-          script
-        );
-
-        return;
-      }
-
-
-      /*
-       * Office.js hasn't finished exposing Office.actions.
-       * Check again shortly.
-       */
-
-      setTimeout(
-        waitForOfficeActions,
-        50
-      );
-
-    })();
-
+  <!-- Tarifast event runtime -->
+  <script
+    type="text/javascript"
+    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-1130">
   </script>
-
 </head>
 
 <body></body>
