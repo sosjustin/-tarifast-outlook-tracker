@@ -2,71 +2,60 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
-
   <title>Tarifast Email Tracker</title>
 
+  <!--
+    STAGE 1
+    Proves Outlook loaded commands.html.
+  -->
   <script>
-    /*
-     * TEMPORARY DIAGNOSTIC
-     *
-     * This executes as soon as commands.html itself loads.
-     * It does NOT depend on Office.js, commands.js,
-     * Office.actions.associate, or the recipient handler.
-     */
-
     (function () {
       try {
         fetch(
           "https://www.tarifastops.com/_functions/emailTrackingCreate",
           {
             method: "POST",
-
             headers: {
               "Content-Type": "application/json"
             },
-
             body: JSON.stringify({
-              recipientEmail:
-                "jlesperance@tarifastops.com",
-
-              recipientName:
-                "OUTLOOK HTML RUNTIME DIAGNOSTIC",
-
-              company:
-                "Tarifast",
-
-              subject:
-                "OUTLOOK_HTML_RUNTIME_LOADED",
-
-              messageId:
-                "html-runtime-" + Date.now()
+              recipientEmail: "jlesperance@tarifastops.com",
+              recipientName: "OUTLOOK HTML RUNTIME DIAGNOSTIC",
+              company: "Tarifast",
+              subject: "OUTLOOK_HTML_RUNTIME_LOADED",
+              messageId: "html-runtime-" + Date.now()
             })
           }
-        ).catch(function () {
-          // Diagnostic must never interfere with Outlook.
-        });
-
-      } catch (_) {
-        // Diagnostic must never interfere with Outlook.
-      }
+        ).catch(function () {});
+      } catch (_) {}
     })();
   </script>
 
 
+  <!--
+    STAGE 2
+    Load commands.js BEFORE Office.js.
+
+    The very first executable statement in our current
+    commands.js writes OUTLOOK_COMMANDS_JS_LOADED and does
+    not require Office.js.
+  -->
+  <script
+    type="text/javascript"
+    src="https://sosjustin.github.io/-tarifast-outlook-tracker/commands.js?v=20261002-1110">
+  </script>
+
+
+  <!--
+    STAGE 3
+    Office.js comes afterward for this diagnostic.
+  -->
   <script
     type="text/javascript"
     src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
   </script>
 
-
-  <script
-    type="text/javascript"
-    src="commands.js">
-  </script>
-
 </head>
 
-<body>
-</body>
+<body></body>
 </html>
