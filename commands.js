@@ -29,7 +29,10 @@ function officeGetAsync(target) {
       if (result.status === Office.AsyncResultStatus.Succeeded) {
         resolve(result.value);
       } else {
-        reject(result.error || new Error("Office getAsync failed"));
+        reject(
+          result.error ||
+          new Error("Office getAsync failed")
+        );
       }
     });
   });
@@ -51,7 +54,11 @@ function sessionGetAsync(sessionData, key) {
 
 function sessionSetAsync(sessionData, key, value) {
   return new Promise((resolve) => {
-    sessionData.setAsync(key, value, () => resolve());
+    sessionData.setAsync(
+      key,
+      value,
+      () => resolve()
+    );
   });
 }
 
@@ -64,7 +71,10 @@ function appendOnSendAsync(body, html) {
         coercionType: Office.CoercionType.Html
       },
       (result) => {
-        if (result.status === Office.AsyncResultStatus.Succeeded) {
+        if (
+          result.status ===
+          Office.AsyncResultStatus.Succeeded
+        ) {
           resolve();
         } else {
           reject(
@@ -83,7 +93,10 @@ function appendOnSendAsync(body, html) {
 ========================================================= */
 
 function firstRecipient(recipients) {
-  if (!Array.isArray(recipients) || recipients.length === 0) {
+  if (
+    !Array.isArray(recipients) ||
+    recipients.length === 0
+  ) {
     return null;
   }
 
@@ -126,7 +139,10 @@ function makeClientMessageId() {
    CREATE TRACKING RECORD IN WIX
 ========================================================= */
 
-async function createTrackingRecord(recipient, subject) {
+async function createTrackingRecord(
+  recipient,
+  subject
+) {
 
   const controller =
     typeof AbortController !== "undefined"
@@ -154,7 +170,9 @@ async function createTrackingRecord(recipient, subject) {
           recipientEmail: recipient.email,
           recipientName: recipient.name,
           company: "",
-          subject: String(subject || "").trim(),
+          subject: String(
+            subject || ""
+          ).trim(),
           messageId: makeClientMessageId()
         }),
 
@@ -172,7 +190,8 @@ async function createTrackingRecord(recipient, subject) {
     }
 
 
-    const data = await response.json();
+    const data =
+      await response.json();
 
 
     if (
@@ -207,7 +226,9 @@ async function createTrackingRecord(recipient, subject) {
    Any failure simply exits and completes the event.
 ========================================================= */
 
-async function onMessageRecipientsChangedHandler(event) {
+async function onMessageRecipientsChangedHandler(
+  event
+) {
 
   try {
 
@@ -221,7 +242,8 @@ async function onMessageRecipientsChangedHandler(event) {
       !item.subject ||
       !item.body ||
       !item.sessionData ||
-      typeof item.body.appendOnSendAsync !== "function"
+      typeof item.body.appendOnSendAsync !==
+        "function"
     ) {
       return;
     }
@@ -249,29 +271,18 @@ async function onMessageRecipientsChangedHandler(event) {
      */
 
     const recipients =
-      await officeGetAsync(item.to);
+      await officeGetAsync(
+        item.to
+      );
 
 
     const recipient =
-      firstRecipient(recipients);
+      firstRecipient(
+        recipients
+      );
 
 
     if (!recipient) {
-      return;
-    }
-
-
-    /*
-     * Tracking pixels require an HTML body.
-     */
-
-    const bodyType =
-      await officeGetAsync(item.body);
-
-
-    if (
-      bodyType !== Office.CoercionType.Html
-    ) {
       return;
     }
 
@@ -287,7 +298,9 @@ async function onMessageRecipientsChangedHandler(event) {
     try {
 
       subject =
-        await officeGetAsync(item.subject);
+        await officeGetAsync(
+          item.subject
+        );
 
     } catch (_) {
 
