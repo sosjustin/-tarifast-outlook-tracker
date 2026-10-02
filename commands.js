@@ -8,14 +8,17 @@ const TRACKING_SESSION_KEY =
 /* =========================================================
    DIAGNOSTIC HELPER
 
-   Temporary diagnostic records written to Wix so we can
-   determine exactly how far commands.js gets.
+   TEMPORARY:
+   Writes diagnostic stages to the Wix EmailTracking
+   collection so we can determine exactly where Outlook
+   event activation succeeds or fails.
 
-   This function is deliberately fail-open.
+   All diagnostics are fail-open.
 ========================================================= */
 
 async function writeDiagnostic(stage) {
   try {
+
     await fetch(
       TRACKING_CREATE_URL,
       {
@@ -36,7 +39,7 @@ async function writeDiagnostic(stage) {
             "Tarifast",
 
           subject:
-            stage,
+            String(stage || "UNKNOWN_DIAGNOSTIC"),
 
           messageId:
             "outlook-js-" +
@@ -48,8 +51,13 @@ async function writeDiagnostic(stage) {
         })
       }
     );
+
   } catch (_) {
-    // Diagnostics must never interfere with Outlook.
+
+    /*
+     * Diagnostics must never interfere with Outlook.
+     */
+
   }
 }
 
@@ -57,7 +65,7 @@ async function writeDiagnostic(stage) {
 /* =========================================================
    DIAGNOSTIC STAGE 1
 
-   If this appears in Wix, commands.js itself loaded and
+   If this record appears, commands.js itself loaded and
    began executing.
 ========================================================= */
 
@@ -67,60 +75,72 @@ writeDiagnostic(
 
 
 /* =========================================================
-   SEND HANDLER
-
-   This remains here for compatibility with the existing
-   JavaScript file, but v8 does NOT declare OnMessageSend.
-
-   Therefore Outlook should never invoke this function.
-========================================================= */
-
-function onMessageSendHandler(event) {
-  event.completed({
-    allowEvent: true
-  });
-}
-
-
-/* =========================================================
    OFFICE.JS PROMISE WRAPPERS
 ========================================================= */
 
 function officeGetAsync(target) {
+
   return new Promise((resolve, reject) => {
+
     target.getAsync((result) => {
+
       if (
         result.status ===
         Office.AsyncResultStatus.Succeeded
       ) {
-        resolve(result.value);
+
+        resolve(
+          result.value
+        );
+
       } else {
+
         reject(
           result.error ||
-          new Error("Office getAsync failed")
+          new Error(
+            "Office getAsync failed"
+          )
         );
+
       }
+
     });
+
   });
+
 }
 
 
 function bodyGetTypeAsync(body) {
+
   return new Promise((resolve, reject) => {
+
     body.getTypeAsync((result) => {
+
       if (
         result.status ===
         Office.AsyncResultStatus.Succeeded
       ) {
-        resolve(result.value);
+
+        resolve(
+          result.value
+        );
+
       } else {
+
         reject(
           result.error ||
-          new Error("body.getTypeAsync failed")
+          new Error(
+            "body.getTypeAsync failed"
+          )
         );
+
       }
+
     });
+
   });
+
 }
 
 
@@ -128,23 +148,38 @@ function sessionGetAsync(
   sessionData,
   key
 ) {
+
   return new Promise((resolve) => {
+
     sessionData.getAsync(
       key,
       (result) => {
+
         if (
           result.status ===
           Office.AsyncResultStatus.Succeeded
         ) {
+
           resolve(
             result.value || ""
           );
+
         } else {
+
+          /*
+           * Session data failure should never stop tracking
+           * from attempting to continue.
+           */
+
           resolve("");
+
         }
+
       }
     );
+
   });
+
 }
 
 
@@ -153,13 +188,17 @@ function sessionSetAsync(
   key,
   value
 ) {
+
   return new Promise((resolve) => {
+
     sessionData.setAsync(
       key,
       value,
       () => resolve()
     );
+
   });
+
 }
 
 
@@ -168,29 +207,39 @@ function appendOnSendAsync(
   content,
   coercionType
 ) {
+
   return new Promise((resolve, reject) => {
+
     body.appendOnSendAsync(
       content,
       {
         coercionType
       },
       (result) => {
+
         if (
           result.status ===
           Office.AsyncResultStatus.Succeeded
         ) {
+
           resolve();
+
         } else {
+
           reject(
             result.error ||
             new Error(
               "appendOnSendAsync failed"
             )
           );
+
         }
+
       }
     );
+
   });
+
 }
 
 
@@ -199,31 +248,45 @@ function appendOnSendAsync(
 ========================================================= */
 
 function firstRecipient(recipients) {
+
   if (
     !Array.isArray(recipients) ||
     recipients.length === 0
   ) {
+
     return null;
+
   }
+
 
   const recipient =
     recipients[0] || {};
 
-  const email = String(
-    recipient.emailAddress || ""
-  ).trim();
+
+  const email =
+    String(
+      recipient.emailAddress || ""
+    ).trim();
+
 
   if (!email) {
+
     return null;
+
   }
 
+
   return {
+
     email,
 
-    name: String(
-      recipient.displayName || ""
-    ).trim()
+    name:
+      String(
+        recipient.displayName || ""
+      ).trim()
+
   };
+
 }
 
 
@@ -232,18 +295,25 @@ function firstRecipient(recipients) {
 ========================================================= */
 
 function makeClientMessageId() {
+
   return [
+
     "tarifast",
-    Date.now().toString(36),
+
+    Date.now()
+      .toString(36),
+
     Math.random()
       .toString(36)
       .slice(2, 12)
+
   ].join("-");
+
 }
 
 
 /* =========================================================
-   CREATE TRACKING RECORD
+   CREATE TRACKING RECORD IN WIX
 ========================================================= */
 
 async function createTrackingRecord(
@@ -256,12 +326,18 @@ async function createTrackingRecord(
       ? new AbortController()
       : null;
 
+
   const timeoutId =
-    setTimeout(() => {
-      if (controller) {
-        controller.abort();
-      }
-    }, 5000);
+    setTimeout(
+      () => {
+
+        if (controller) {
+          controller.abort();
+        }
+
+      },
+      5000
+    );
 
 
   try {
@@ -278,13 +354,15 @@ async function createTrackingRecord(
           },
 
           body: JSON.stringify({
+
             recipientEmail:
               recipient.email,
 
             recipientName:
               recipient.name,
 
-            company: "",
+            company:
+              "",
 
             subject:
               String(
@@ -293,6 +371,7 @@ async function createTrackingRecord(
 
             messageId:
               makeClientMessageId()
+
           }),
 
           signal:
@@ -304,10 +383,12 @@ async function createTrackingRecord(
 
 
     if (!response.ok) {
+
       throw new Error(
         "Tracking endpoint returned HTTP " +
         response.status
       );
+
     }
 
 
@@ -320,9 +401,11 @@ async function createTrackingRecord(
       data.success !== true ||
       !data.pixelUrl
     ) {
+
       throw new Error(
         "Tracking endpoint did not return a pixel URL"
       );
+
     }
 
 
@@ -337,11 +420,18 @@ async function createTrackingRecord(
     );
 
   }
+
 }
 
 
 /* =========================================================
    RECIPIENT CHANGE EVENT
+
+   This event prepares the tracking pixel while the message
+   is being composed.
+
+   Tracking failure must NEVER prevent an email from being
+   sent.
 ========================================================= */
 
 async function onMessageRecipientsChangedHandler(
@@ -351,8 +441,10 @@ async function onMessageRecipientsChangedHandler(
   /*
    * DIAGNOSTIC STAGE 3
    *
-   * This is deliberately before any Office mailbox calls.
-   * If this appears, Outlook actually invoked our handler.
+   * This occurs before any mailbox/item operations.
+   *
+   * If this appears, Outlook successfully invoked the
+   * function associated with OnMessageRecipientsChanged.
    */
 
   await writeDiagnostic(
@@ -372,21 +464,23 @@ async function onMessageRecipientsChangedHandler(
       !item.subject ||
       !item.body ||
       !item.sessionData ||
-      typeof item.body
-        .appendOnSendAsync !==
+      typeof item.body.appendOnSendAsync !==
         "function" ||
-      typeof item.body
-        .getTypeAsync !==
+      typeof item.body.getTypeAsync !==
         "function"
     ) {
+
       return;
+
     }
 
 
-    /*
-     * Prevent duplicate tracking records within the
-     * same compose session.
-     */
+    /* =====================================================
+       DUPLICATE PROTECTION
+
+       Only prepare one tracking pixel for this compose
+       session.
+    ===================================================== */
 
     const existingPixelUrl =
       await sessionGetAsync(
@@ -396,13 +490,15 @@ async function onMessageRecipientsChangedHandler(
 
 
     if (existingPixelUrl) {
+
       return;
+
     }
 
 
-    /*
-     * Get current TO recipients.
-     */
+    /* =====================================================
+       GET CURRENT TO RECIPIENTS
+    ===================================================== */
 
     const recipients =
       await officeGetAsync(
@@ -417,13 +513,15 @@ async function onMessageRecipientsChangedHandler(
 
 
     if (!recipient) {
+
       return;
+
     }
 
 
-    /*
-     * Get actual Outlook body format.
-     */
+    /* =====================================================
+       GET OUTLOOK BODY FORMAT
+    ===================================================== */
 
     const bodyFormat =
       await bodyGetTypeAsync(
@@ -431,9 +529,14 @@ async function onMessageRecipientsChangedHandler(
       );
 
 
-    /*
-     * Subject is metadata only.
-     */
+    /* =====================================================
+       GET SUBJECT
+
+       Subject is metadata only.
+
+       Failure to retrieve the subject does not stop
+       tracking.
+    ===================================================== */
 
     let subject = "";
 
@@ -452,9 +555,9 @@ async function onMessageRecipientsChangedHandler(
     }
 
 
-    /*
-     * Create tracking record in Wix.
-     */
+    /* =====================================================
+       CREATE WIX TRACKING RECORD
+    ===================================================== */
 
     const pixelUrl =
       await createTrackingRecord(
@@ -463,22 +566,34 @@ async function onMessageRecipientsChangedHandler(
       );
 
 
-    /*
-     * Tracking pixels require an HTML message.
-     */
+    /* =====================================================
+       TRACKING PIXELS REQUIRE HTML
+    ===================================================== */
 
     if (
       bodyFormat !==
       Office.CoercionType.Html
     ) {
+
       return;
+
     }
 
 
+    /* =====================================================
+       ESCAPE PIXEL URL FOR HTML ATTRIBUTE
+    ===================================================== */
+
     const safePixelUrl =
       pixelUrl
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;");
+        .replace(
+          /&/g,
+          "&amp;"
+        )
+        .replace(
+          /"/g,
+          "&quot;"
+        );
 
 
     const trackingContent =
@@ -487,10 +602,14 @@ async function onMessageRecipientsChangedHandler(
       '" width="1" height="1" alt="" />';
 
 
-    /*
-     * Register pixel for insertion when Outlook sends
-     * the message.
-     */
+    /* =====================================================
+       REGISTER PIXEL FOR APPEND-ON-SEND
+
+       Outlook inserts this content when the message is
+       actually sent.
+
+       This does NOT use an OnMessageSend LaunchEvent.
+    ===================================================== */
 
     await appendOnSendAsync(
       item.body,
@@ -499,9 +618,9 @@ async function onMessageRecipientsChangedHandler(
     );
 
 
-    /*
-     * Remember that this compose session is prepared.
-     */
+    /* =====================================================
+       MARK THIS COMPOSE SESSION AS PREPARED
+    ===================================================== */
 
     await sessionSetAsync(
       item.sessionData,
@@ -515,20 +634,34 @@ async function onMessageRecipientsChangedHandler(
     /*
      * FAIL OPEN.
      *
-     * Tracking failure never determines whether an
-     * email can be sent.
+     * Any tracking failure is deliberately ignored.
+     *
+     * Tracking must remain completely independent from
+     * Outlook's ability to send the message.
      */
 
   } finally {
 
+    /*
+     * Complete the recipient-change event.
+     */
+
     event.completed();
 
   }
+
 }
 
 
 /* =========================================================
    OUTLOOK EVENT REGISTRATION
+
+   IMPORTANT:
+   v8 declares ONLY:
+
+       OnMessageRecipientsChanged
+
+   There is deliberately NO OnMessageSend association here.
 ========================================================= */
 
 try {
@@ -543,43 +676,94 @@ try {
    * DIAGNOSTIC STAGE 2
    *
    * If this appears, Office.actions.associate completed
-   * without throwing.
+   * successfully.
    */
 
   writeDiagnostic(
     "OUTLOOK_RECIPIENT_HANDLER_REGISTERED"
   );
 
-} catch (_) {
+
+} catch (error) {
 
   /*
-   * If association itself fails, create a separate
-   * diagnostic record.
+   * Capture the actual Office exception rather than hiding
+   * it behind a generic registration failure.
    */
 
+  let errorMessage =
+    "UNKNOWN_REGISTRATION_ERROR";
+
+
+  try {
+
+    if (error) {
+
+      if (error.name) {
+
+        errorMessage +=
+          "_NAME_" +
+          String(
+            error.name
+          );
+
+      }
+
+
+      if (error.message) {
+
+        errorMessage +=
+          "_MESSAGE_" +
+          String(
+            error.message
+          );
+
+      }
+
+
+      if (
+        !error.name &&
+        !error.message
+      ) {
+
+        errorMessage +=
+          "_" +
+          String(
+            error
+          );
+
+      }
+
+    }
+
+  } catch (_) {
+
+    errorMessage =
+      "ERROR_READING_REGISTRATION_EXCEPTION";
+
+  }
+
+
+  /*
+   * Keep this reasonably short because Wix Subject fields
+   * can be inconvenient to inspect when extremely long.
+   */
+
+  errorMessage =
+    errorMessage
+      .replace(
+        /\s+/g,
+        "_"
+      )
+      .slice(
+        0,
+        350
+      );
+
+
   writeDiagnostic(
-    "OUTLOOK_RECIPIENT_HANDLER_REGISTRATION_FAILED"
+    "REGISTRATION_ERROR_" +
+    errorMessage
   );
-
-}
-
-
-/*
- * Keep the existing send association in JavaScript.
- *
- * v8 does NOT contain an OnMessageSend LaunchEvent, so
- * Outlook should not invoke this.
- */
-
-try {
-
-  Office.actions.associate(
-    "onMessageSendHandler",
-    onMessageSendHandler
-  );
-
-} catch (_) {
-
-  // Never interfere with Outlook.
 
 }
