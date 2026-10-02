@@ -2,76 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tarifast Outlook Tracker Runtime Diagnostic</title>
+  <title>Tarifast Outlook Tracker</title>
 
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-  <script>
-    const DIAGNOSTIC_URL =
-      "https://www.tarifastops.com/_functions/emailTrackingCreate";
-
-    /*
-     * DIAGNOSTIC BEACON
-     *
-     * This runs immediately when commands.html itself executes.
-     * It does NOT depend on an Outlook event firing.
-     */
-    fetch(DIAGNOSTIC_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        recipientEmail: "jlesperance@tarifastops.com",
-        recipientName: "Outlook Runtime Diagnostic",
-        company: "Tarifast",
-        subject: "OUTLOOK_RUNTIME_LOADED",
-        messageId: "outlook-runtime-diagnostic"
-      })
-    }).catch(function () {
-      // Diagnostic only. Never interfere with Outlook.
-    });
-
-
-    /*
-     * NEW MESSAGE COMPOSE TEST
-     */
-    function onNewMessageComposeHandler(event) {
-      Office.context.mailbox.item.subject.setAsync(
-        "TARIFAST EVENT RUNTIME WORKS",
-        {
-          asyncContext: event
-        },
-        function (asyncResult) {
-          asyncResult.asyncContext.completed();
-        }
-      );
-    }
-
-
-    /*
-     * SEND TEST
-     */
-    function onMessageSendHandler(event) {
-      event.completed({
-        allowEvent: true
-      });
-    }
-
-
-    /*
-     * REGISTER OUTLOOK EVENT HANDLERS
-     */
-    Office.actions.associate(
-      "onNewMessageComposeHandler",
-      onNewMessageComposeHandler
-    );
-
-    Office.actions.associate(
-      "onMessageSendHandler",
-      onMessageSendHandler
-    );
-  </script>
+  <script src="commands.js"></script>
 </head>
 
 <body></body>
