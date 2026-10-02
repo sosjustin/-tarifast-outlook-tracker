@@ -278,12 +278,44 @@ async function createTrackingRecord(
 
    FAILURE HERE NEVER PREVENTS SENDING.
 ========================================================= */
-
 async function onMessageRecipientsChangedHandler(
   event
 ) {
 
   try {
+
+    /*
+     * TEMPORARY DIAGNOSTIC
+     * Proves Outlook actually launched this event handler.
+     */
+
+    try {
+      await fetch(
+        TRACKING_CREATE_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            recipientEmail:
+              "jlesperance@tarifastops.com",
+            recipientName:
+              "OUTLOOK EVENT DIAGNOSTIC",
+            company:
+              "Tarifast",
+            subject:
+              "OUTLOOK_RECIPIENT_EVENT",
+            messageId:
+              "recipient-event-" +
+              Date.now()
+          })
+        }
+      );
+    } catch (_) {
+      // Diagnostic must never interfere with Outlook.
+    }
+
 
     const item =
       Office.context.mailbox.item;
