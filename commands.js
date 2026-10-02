@@ -1,3 +1,18 @@
+/* ============================================================
+   TARIFAST EMAIL TRACKER
+   Outlook Event Runtime
+
+   Event:
+   OnMessageRecipientsChanged
+
+   IMPORTANT:
+   - No OnMessageSend handler.
+   - No Smart Alerts send interception.
+   - Tracking failure must never block sending.
+   - Tracking pixel is registered with appendOnSendAsync.
+============================================================ */
+
+
 const TRACKING_CREATE_URL =
   "https://www.tarifastops.com/_functions/emailTrackingCreate";
 
@@ -5,21 +20,17 @@ const TRACKING_SESSION_KEY =
   "tarifastEmailTrackingPixelUrl";
 
 
-/* =========================================================
-   DIAGNOSTIC HELPER
+/* ============================================================
+   TEMPORARY DIAGNOSTIC
 
-   TEMPORARY:
-   Writes diagnostic stages to the Wix EmailTracking
-   collection so we can determine exactly where Outlook
-   event activation succeeds or fails.
+   Remove after production tracking is proven.
+============================================================ */
 
-   All diagnostics are fail-open.
-========================================================= */
+function writeDiagnostic(stage) {
 
-async function writeDiagnostic(stage) {
   try {
 
-    await fetch(
+    fetch(
       TRACKING_CREATE_URL,
       {
         method: "POST",
@@ -29,6 +40,7 @@ async function writeDiagnostic(stage) {
         },
 
         body: JSON.stringify({
+
           recipientEmail:
             "jlesperance@tarifastops.com",
 
@@ -39,67 +51,57 @@ async function writeDiagnostic(stage) {
             "Tarifast",
 
           subject:
-            String(stage || "UNKNOWN_DIAGNOSTIC"),
+            String(stage || "UNKNOWN"),
 
           messageId:
-            "outlook-js-" +
+            "outlook-diagnostic-" +
             Date.now() +
             "-" +
             Math.random()
               .toString(36)
               .slice(2, 8)
+
         })
+
       }
-    );
+    ).catch(function () {});
 
-  } catch (_) {
+  } catch (_) {}
 
-    /*
-     * Diagnostics must never interfere with Outlook.
-     */
-
-  }
 }
 
 
-/* =========================================================
-   DIAGNOSTIC STAGE 1
-
-   If this record appears, commands.js itself loaded and
-   began executing.
-========================================================= */
+/* ============================================================
+   PROVE COMMANDS.JS EXECUTED
+============================================================ */
 
 writeDiagnostic(
   "OUTLOOK_COMMANDS_JS_LOADED"
 );
 
 
-/* =========================================================
-   OFFICE.JS PROMISE WRAPPERS
-========================================================= */
+/* ============================================================
+   OFFICE ASYNC HELPERS
+============================================================ */
 
-function officeGetAsync(target) {
+function getAsyncValue(target) {
 
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
 
-    target.getAsync((result) => {
+    target.getAsync(function (result) {
 
       if (
         result.status ===
         Office.AsyncResultStatus.Succeeded
       ) {
 
-        resolve(
-          result.value
-        );
+        resolve(result.value);
 
       } else {
 
         reject(
           result.error ||
-          new Error(
-            "Office getAsync failed"
-          )
+          new Error("Office getAsync failed")
         );
 
       }
@@ -111,28 +113,24 @@ function officeGetAsync(target) {
 }
 
 
-function bodyGetTypeAsync(body) {
+function getBodyType(body) {
 
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
 
-    body.getTypeAsync((result) => {
+    body.getTypeAsync(function (result) {
 
       if (
         result.status ===
         Office.AsyncResultStatus.Succeeded
       ) {
 
-        resolve(
-          result.value
-        );
+        resolve(result.value);
 
       } else {
 
         reject(
           result.error ||
-          new Error(
-            "body.getTypeAsync failed"
-          )
+          new Error("body.getTypeAsync failed")
         );
 
       }
@@ -144,16 +142,16 @@ function bodyGetTypeAsync(body) {
 }
 
 
-function sessionGetAsync(
+function getSessionValue(
   sessionData,
   key
 ) {
 
-  return new Promise((resolve) => {
+  return new Promise(function (resolve) {
 
     sessionData.getAsync(
       key,
-      (result) => {
+      function (result) {
 
         if (
           result.status ===
@@ -165,11 +163,6 @@ function sessionGetAsync(
           );
 
         } else {
-
-          /*
-           * Session data failure should never stop tracking
-           * from attempting to continue.
-           */
 
           resolve("");
 
@@ -183,18 +176,20 @@ function sessionGetAsync(
 }
 
 
-function sessionSetAsync(
+function setSessionValue(
   sessionData,
   key,
   value
 ) {
 
-  return new Promise((resolve) => {
+  return new Promise(function (resolve) {
 
     sessionData.setAsync(
       key,
       value,
-      () => resolve()
+      function () {
+        resolve();
+      }
     );
 
   });
@@ -202,20 +197,21 @@ function sessionSetAsync(
 }
 
 
-function appendOnSendAsync(
+function appendTrackingPixel(
   body,
-  content,
-  coercionType
+  html
 ) {
 
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
 
     body.appendOnSendAsync(
-      content,
+      html,
       {
-        coercionType
+        coercionType:
+          Office.CoercionType.Html
       },
-      (result) => {
+
+      function (result) {
 
         if (
           result.status ===
@@ -243,11 +239,11 @@ function appendOnSendAsync(
 }
 
 
-/* =========================================================
+/* ============================================================
    RECIPIENT
-========================================================= */
+============================================================ */
 
-function firstRecipient(recipients) {
+function getFirstRecipient(recipients) {
 
   if (
     !Array.isArray(recipients) ||
@@ -260,7 +256,14 @@ function firstRecipient(recipients) {
 
 
   const recipient =
-    recipients[0] || {};
+    recipients[0];
+
+
+  if (!recipient) {
+
+    return null;
+
+  }
 
 
   const email =
@@ -278,7 +281,7 @@ function firstRecipient(recipients) {
 
   return {
 
-    email,
+    email: email,
 
     name:
       String(
@@ -290,111 +293,81 @@ function firstRecipient(recipients) {
 }
 
 
-/* =========================================================
-   CLIENT-SIDE MESSAGE ID
-========================================================= */
+/* ============================================================
+   CLIENT MESSAGE ID
+============================================================ */
 
-function makeClientMessageId() {
+function createClientMessageId() {
 
-  return [
-
-    "tarifast",
-
-    Date.now()
-      .toString(36),
-
+  return (
+    "tarifast-" +
+    Date.now().toString(36) +
+    "-" +
     Math.random()
       .toString(36)
       .slice(2, 12)
-
-  ].join("-");
+  );
 
 }
 
 
-/* =========================================================
-   CREATE TRACKING RECORD IN WIX
-========================================================= */
+/* ============================================================
+   CREATE WIX TRACKING RECORD
+============================================================ */
 
-async function createTrackingRecord(
+function createTrackingRecord(
   recipient,
   subject
 ) {
 
-  const controller =
-    typeof AbortController !== "undefined"
-      ? new AbortController()
-      : null;
+  return fetch(
+    TRACKING_CREATE_URL,
+    {
+      method: "POST",
 
-
-  const timeoutId =
-    setTimeout(
-      () => {
-
-        if (controller) {
-          controller.abort();
-        }
-
+      headers: {
+        "Content-Type":
+          "application/json"
       },
-      5000
-    );
 
+      body: JSON.stringify({
 
-  try {
+        recipientEmail:
+          recipient.email,
 
-    const response =
-      await fetch(
-        TRACKING_CREATE_URL,
-        {
-          method: "POST",
+        recipientName:
+          recipient.name,
 
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
+        company:
+          "",
 
-          body: JSON.stringify({
+        subject:
+          String(
+            subject || ""
+          ).trim(),
 
-            recipientEmail:
-              recipient.email,
+        messageId:
+          createClientMessageId()
 
-            recipientName:
-              recipient.name,
+      })
 
-            company:
-              "",
-
-            subject:
-              String(
-                subject || ""
-              ).trim(),
-
-            messageId:
-              makeClientMessageId()
-
-          }),
-
-          signal:
-            controller
-              ? controller.signal
-              : undefined
-        }
-      );
-
+    }
+  )
+  .then(function (response) {
 
     if (!response.ok) {
 
       throw new Error(
-        "Tracking endpoint returned HTTP " +
+        "Tracking endpoint HTTP " +
         response.status
       );
 
     }
 
+    return response.json();
 
-    const data =
-      await response.json();
-
+  })
+  .then(function (data) {
 
     if (
       !data ||
@@ -403,7 +376,7 @@ async function createTrackingRecord(
     ) {
 
       throw new Error(
-        "Tracking endpoint did not return a pixel URL"
+        "Tracking endpoint returned no pixel URL"
       );
 
     }
@@ -413,256 +386,499 @@ async function createTrackingRecord(
       data.pixelUrl
     );
 
-  } finally {
-
-    clearTimeout(
-      timeoutId
-    );
-
-  }
+  });
 
 }
 
 
-/* =========================================================
-   RECIPIENT CHANGE EVENT
+/* ============================================================
+   ESCAPE PIXEL URL
+============================================================ */
 
-   This event prepares the tracking pixel while the message
-   is being composed.
+function escapeHtmlAttribute(value) {
 
-   Tracking failure must NEVER prevent an email from being
-   sent.
-========================================================= */
+  return String(value)
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    );
 
-async function onMessageRecipientsChangedHandler(
-  event
-) {
-
-  /*
-   * DIAGNOSTIC STAGE 3
-   *
-   * This occurs before any mailbox/item operations.
-   *
-   * If this appears, Outlook successfully invoked the
-   * function associated with OnMessageRecipientsChanged.
-   */
-
-  await writeDiagnostic(
-    "OUTLOOK_RECIPIENT_HANDLER_ENTERED"
-  );
-
-
-  try {
-
-    const item =
-      Office.context.mailbox.item;
+}
 
 
-    if (
-      !item ||
-      !item.to ||
-      !item.subject ||
-      !item.body ||
-      !item.sessionData ||
-      typeof item.body.appendOnSendAsync !==
-        "function" ||
-      typeof item.body.getTypeAsync !==
-        "function"
-    ) {
+/* ============================================================
+   TRACK MESSAGE
+============================================================ */
 
-      return;
+function prepareTrackingPixel() {
 
-    }
+  const item =
+    Office.context.mailbox.item;
 
 
-    /* =====================================================
-       DUPLICATE PROTECTION
+  if (!item) {
 
-       Only prepare one tracking pixel for this compose
-       session.
-    ===================================================== */
+    writeDiagnostic(
+      "TRACKING_NO_ITEM"
+    );
 
-    const existingPixelUrl =
-      await sessionGetAsync(
-        item.sessionData,
-        TRACKING_SESSION_KEY
-      );
+    return Promise.resolve();
+
+  }
 
 
-    if (existingPixelUrl) {
+  if (
+    !item.to ||
+    !item.body
+  ) {
 
-      return;
+    writeDiagnostic(
+      "TRACKING_REQUIRED_APIS_MISSING"
+    );
 
-    }
+    return Promise.resolve();
+
+  }
 
 
-    /* =====================================================
-       GET CURRENT TO RECIPIENTS
-    ===================================================== */
+  /* ----------------------------------------------------------
+     Get recipients.
+  ---------------------------------------------------------- */
 
-    const recipients =
-      await officeGetAsync(
-        item.to
-      );
+  return getAsyncValue(
+    item.to
+  )
 
+  .then(function (recipients) {
 
     const recipient =
-      firstRecipient(
+      getFirstRecipient(
         recipients
       );
 
 
     if (!recipient) {
 
-      return;
+      writeDiagnostic(
+        "TRACKING_NO_TO_RECIPIENT"
+      );
+
+      return null;
 
     }
 
 
-    /* =====================================================
-       GET OUTLOOK BODY FORMAT
-    ===================================================== */
+    return {
 
-    const bodyFormat =
-      await bodyGetTypeAsync(
-        item.body
+      recipient: recipient
+
+    };
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Check body type.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    return getBodyType(
+      item.body
+    )
+    .then(function (bodyType) {
+
+      context.bodyType =
+        bodyType;
+
+      return context;
+
+    });
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Tracking pixel requires an HTML message.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    if (
+      context.bodyType !==
+      Office.CoercionType.Html
+    ) {
+
+      writeDiagnostic(
+        "TRACKING_BODY_NOT_HTML"
+      );
+
+      return null;
+
+    }
+
+
+    return context;
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Check session data if supported.
+
+     If the message is already prepared, do nothing.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    if (
+      !item.sessionData ||
+      typeof item.sessionData.getAsync !==
+        "function"
+    ) {
+
+      context.sessionSupported =
+        false;
+
+      return context;
+
+    }
+
+
+    context.sessionSupported =
+      true;
+
+
+    return getSessionValue(
+      item.sessionData,
+      TRACKING_SESSION_KEY
+    )
+    .then(function (existingPixel) {
+
+      if (existingPixel) {
+
+        writeDiagnostic(
+          "TRACKING_ALREADY_PREPARED"
+        );
+
+        return null;
+
+      }
+
+
+      return context;
+
+    });
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Get subject.
+
+     Subject failure does not stop tracking.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    if (!item.subject) {
+
+      context.subject = "";
+
+      return context;
+
+    }
+
+
+    return getAsyncValue(
+      item.subject
+    )
+
+    .then(function (subject) {
+
+      context.subject =
+        subject || "";
+
+      return context;
+
+    })
+
+    .catch(function () {
+
+      context.subject = "";
+
+      return context;
+
+    });
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Create the Wix tracking record.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    return createTrackingRecord(
+      context.recipient,
+      context.subject
+    )
+
+    .then(function (pixelUrl) {
+
+      context.pixelUrl =
+        pixelUrl;
+
+      writeDiagnostic(
+        "TRACKING_RECORD_CREATED"
+      );
+
+      return context;
+
+    });
+
+  })
+
+
+  /* ----------------------------------------------------------
+     Register pixel for append-on-send.
+  ---------------------------------------------------------- */
+
+  .then(function (context) {
+
+    if (!context) {
+
+      return null;
+
+    }
+
+
+    if (
+      typeof item.body.appendOnSendAsync !==
+        "function"
+    ) {
+
+      writeDiagnostic(
+        "APPEND_ON_SEND_NOT_AVAILABLE"
+      );
+
+      return null;
+
+    }
+
+
+    const safePixelUrl =
+      escapeHtmlAttribute(
+        context.pixelUrl
       );
 
 
-    /* =====================================================
-       GET SUBJECT
+    const pixelHtml =
+      '<img src="' +
+      safePixelUrl +
+      '" width="1" height="1" alt="" ' +
+      'style="display:block;width:1px;height:1px;border:0;" />';
 
-       Subject is metadata only.
 
-       Failure to retrieve the subject does not stop
-       tracking.
-    ===================================================== */
+    return appendTrackingPixel(
+      item.body,
+      pixelHtml
+    )
 
-    let subject = "";
+    .then(function () {
+
+      writeDiagnostic(
+        "TRACKING_PIXEL_REGISTERED"
+      );
+
+
+      if (
+        context.sessionSupported &&
+        item.sessionData &&
+        typeof item.sessionData.setAsync ===
+          "function"
+      ) {
+
+        return setSessionValue(
+          item.sessionData,
+          TRACKING_SESSION_KEY,
+          context.pixelUrl
+        );
+
+      }
+
+
+      return null;
+
+    })
+
+    .then(function () {
+
+      return context;
+
+    });
+
+  });
+
+
+}
+
+
+/* ============================================================
+   ON MESSAGE RECIPIENTS CHANGED
+
+   THIS IS THE FUNCTION NAMED BY THE v8 MANIFEST.
+============================================================ */
+
+function onMessageRecipientsChangedHandler(
+  event
+) {
+
+  /*
+   * This is the critical diagnostic.
+   *
+   * If this appears, Outlook has invoked the actual
+   * OnMessageRecipientsChanged handler.
+   */
+
+  writeDiagnostic(
+    "OUTLOOK_RECIPIENT_HANDLER_ENTERED"
+  );
+
+
+  try {
+
+    prepareTrackingPixel()
+
+      .catch(function (error) {
+
+        let message =
+          "TRACKING_FAILED";
+
+
+        try {
+
+          if (
+            error &&
+            error.message
+          ) {
+
+            message +=
+              "_" +
+              String(
+                error.message
+              );
+
+          }
+
+        } catch (_) {}
+
+
+        writeDiagnostic(
+          message
+            .replace(
+              /\s+/g,
+              "_"
+            )
+            .slice(
+              0,
+              300
+            )
+        );
+
+      })
+
+      .then(function () {
+
+        /*
+         * Always complete the event.
+         */
+
+        try {
+
+          event.completed();
+
+        } catch (_) {}
+
+      });
+
+
+  } catch (error) {
+
+    /*
+     * Absolute fail-open protection.
+     */
+
+    writeDiagnostic(
+      "TRACKING_HANDLER_EXCEPTION"
+    );
 
 
     try {
 
-      subject =
-        await officeGetAsync(
-          item.subject
-        );
+      event.completed();
 
-    } catch (_) {
-
-      subject = "";
-
-    }
-
-
-    /* =====================================================
-       CREATE WIX TRACKING RECORD
-    ===================================================== */
-
-    const pixelUrl =
-      await createTrackingRecord(
-        recipient,
-        subject
-      );
-
-
-    /* =====================================================
-       TRACKING PIXELS REQUIRE HTML
-    ===================================================== */
-
-    if (
-      bodyFormat !==
-      Office.CoercionType.Html
-    ) {
-
-      return;
-
-    }
-
-
-    /* =====================================================
-       ESCAPE PIXEL URL FOR HTML ATTRIBUTE
-    ===================================================== */
-
-    const safePixelUrl =
-      pixelUrl
-        .replace(
-          /&/g,
-          "&amp;"
-        )
-        .replace(
-          /"/g,
-          "&quot;"
-        );
-
-
-    const trackingContent =
-      '<img src="' +
-      safePixelUrl +
-      '" width="1" height="1" alt="" />';
-
-
-    /* =====================================================
-       REGISTER PIXEL FOR APPEND-ON-SEND
-
-       Outlook inserts this content when the message is
-       actually sent.
-
-       This does NOT use an OnMessageSend LaunchEvent.
-    ===================================================== */
-
-    await appendOnSendAsync(
-      item.body,
-      trackingContent,
-      bodyFormat
-    );
-
-
-    /* =====================================================
-       MARK THIS COMPOSE SESSION AS PREPARED
-    ===================================================== */
-
-    await sessionSetAsync(
-      item.sessionData,
-      TRACKING_SESSION_KEY,
-      pixelUrl
-    );
-
-
-  } catch (_) {
-
-    /*
-     * FAIL OPEN.
-     *
-     * Any tracking failure is deliberately ignored.
-     *
-     * Tracking must remain completely independent from
-     * Outlook's ability to send the message.
-     */
-
-  } finally {
-
-    /*
-     * Complete the recipient-change event.
-     */
-
-    event.completed();
+    } catch (_) {}
 
   }
 
 }
 
 
-/* =========================================================
-   OUTLOOK EVENT REGISTRATION
+/* ============================================================
+   REGISTER EVENT HANDLER
 
-   IMPORTANT:
-   v8 declares ONLY:
-
-       OnMessageRecipientsChanged
-
-   There is deliberately NO OnMessageSend association here.
-========================================================= */
+   Microsoft requires the manifest FunctionName to be
+   associated with the JavaScript function.
+============================================================ */
 
 try {
 
@@ -672,13 +888,6 @@ try {
   );
 
 
-  /*
-   * DIAGNOSTIC STAGE 2
-   *
-   * If this appears, Office.actions.associate completed
-   * successfully.
-   */
-
   writeDiagnostic(
     "OUTLOOK_RECIPIENT_HANDLER_REGISTERED"
   );
@@ -686,84 +895,38 @@ try {
 
 } catch (error) {
 
-  /*
-   * Capture the actual Office exception rather than hiding
-   * it behind a generic registration failure.
-   */
-
-  let errorMessage =
-    "UNKNOWN_REGISTRATION_ERROR";
+  let message =
+    "OUTLOOK_RECIPIENT_HANDLER_REGISTRATION_FAILED";
 
 
   try {
 
-    if (error) {
+    if (
+      error &&
+      error.message
+    ) {
 
-      if (error.name) {
-
-        errorMessage +=
-          "_NAME_" +
-          String(
-            error.name
-          );
-
-      }
-
-
-      if (error.message) {
-
-        errorMessage +=
-          "_MESSAGE_" +
-          String(
-            error.message
-          );
-
-      }
-
-
-      if (
-        !error.name &&
-        !error.message
-      ) {
-
-        errorMessage +=
-          "_" +
-          String(
-            error
-          );
-
-      }
+      message +=
+        "_" +
+        String(
+          error.message
+        );
 
     }
 
-  } catch (_) {
-
-    errorMessage =
-      "ERROR_READING_REGISTRATION_EXCEPTION";
-
-  }
+  } catch (_) {}
 
 
-  /*
-   * Keep this reasonably short because Wix Subject fields
-   * can be inconvenient to inspect when extremely long.
-   */
-
-  errorMessage =
-    errorMessage
+  writeDiagnostic(
+    message
       .replace(
         /\s+/g,
         "_"
       )
       .slice(
         0,
-        350
-      );
-
-
-  writeDiagnostic(
-    "REGISTRATION_ERROR_" +
-    errorMessage
+        300
+      )
   );
 
 }
