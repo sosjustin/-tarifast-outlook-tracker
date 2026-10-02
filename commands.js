@@ -1,33 +1,134 @@
-/* Tarifast v9 minimal event runtime test.
- * Match the Office initialization used by Microsoft's external-recipient sample.
- * Keep event association outside initialization for classic Outlook on Windows.
- */
+/* ============================================================
+   TARIFAST EMAIL TRACKER
+   VERSION 10 — EVENT ACTIVATION DIAGNOSTIC
+
+   PURPOSE
+   ------------------------------------------------------------
+   Determine whether Outlook dispatches:
+
+   1. OnNewMessageCompose
+   2. OnMessageRecipientsChanged
+
+   NO:
+   - Wix calls
+   - fetch()
+   - tracking logic
+   - message modification
+   - OnMessageSend
+============================================================ */
+
 function tarifastDiagnostic(message) {
   try {
-    console.log("Tarifast diagnostic v2: " + message);
+    console.log(
+      "TARIFAST V10 DIAGNOSTIC | " +
+      new Date().toISOString() +
+      " | " +
+      message
+    );
   } catch (_) {
     // Diagnostics must never interrupt event handling.
   }
 }
 
-tarifastDiagnostic("1 - script executing");
+
+/* ============================================================
+   SCRIPT LOAD DIAGNOSTIC
+============================================================ */
+
+tarifastDiagnostic("SCRIPT EXECUTING");
+
+
+/* ============================================================
+   OFFICE INITIALIZATION DIAGNOSTIC
+
+   This is informational only.
+   Event-based activation does not depend on Office.initialize.
+============================================================ */
 
 Office.initialize = function () {
-  tarifastDiagnostic("3 - Office initialization callback reached");
+  tarifastDiagnostic("OFFICE INITIALIZE CALLBACK");
 };
 
-function tarifastV9RecipientsChanged(event) {
-  tarifastDiagnostic("4 - recipient event fired");
+
+/* ============================================================
+   NEW MESSAGE COMPOSE
+============================================================ */
+
+function tarifastV10Compose(event) {
+
+  tarifastDiagnostic("NEW MESSAGE COMPOSE FIRED");
 
   try {
     event.completed();
-  } catch (_) {
-    tarifastDiagnostic("event.completed threw an error");
+  } catch (error) {
+    tarifastDiagnostic(
+      "NEW MESSAGE COMPOSE event.completed ERROR: " +
+      String(error)
+    );
   }
 }
 
-Office.actions.associate(
-  "tarifastV9RecipientsChanged",
-  tarifastV9RecipientsChanged
-);
-tarifastDiagnostic("2 - handler association returned");
+
+/* ============================================================
+   RECIPIENTS CHANGED
+============================================================ */
+
+function tarifastV10RecipientsChanged(event) {
+
+  tarifastDiagnostic("RECIPIENT CHANGE FIRED");
+
+  try {
+    event.completed();
+  } catch (error) {
+    tarifastDiagnostic(
+      "RECIPIENT CHANGE event.completed ERROR: " +
+      String(error)
+    );
+  }
+}
+
+
+/* ============================================================
+   EVENT ASSOCIATIONS
+============================================================ */
+
+try {
+
+  Office.actions.associate(
+    "tarifastV10Compose",
+    tarifastV10Compose
+  );
+
+  tarifastDiagnostic(
+    "COMPOSE HANDLER ASSOCIATION RETURNED"
+  );
+
+} catch (error) {
+
+  tarifastDiagnostic(
+    "COMPOSE HANDLER ASSOCIATION ERROR: " +
+    String(error)
+  );
+
+}
+
+
+try {
+
+  Office.actions.associate(
+    "tarifastV10RecipientsChanged",
+    tarifastV10RecipientsChanged
+  );
+
+  tarifastDiagnostic(
+    "RECIPIENT HANDLER ASSOCIATION RETURNED"
+  );
+
+} catch (error) {
+
+  tarifastDiagnostic(
+    "RECIPIENT HANDLER ASSOCIATION ERROR: " +
+    String(error)
+  );
+
+}
