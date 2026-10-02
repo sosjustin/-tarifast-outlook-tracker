@@ -5,23 +5,7 @@
   <title>Tarifast Email Tracker</title>
 
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-  <script>
-    Office.onReady(function () {
-
-      function onMessageSendHandler(event) {
-        event.completed({
-          allowEvent: true
-        });
-      }
-
-      Office.actions.associate(
-        "onMessageSendHandler",
-        onMessageSendHandler
-      );
-
-    });
-  </script>
+  <script src="commands.js"></script>
 </head>
 
 <body></body>
