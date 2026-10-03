@@ -1,26 +1,24 @@
 /* ============================================================
    TARIFAST EMAIL TRACKER
-   PRODUCTION — RECIPIENT ACTIVATION + APPEND ON SEND
+   PRODUCTION-2 — COMPOSE SESSION ID + APPEND ON SEND
 
    ARCHITECTURE
    ------------------------------------------------------------
    Outlook OnMessageRecipientsChanged
         ↓
+   Establish one composeId for this compose runtime
+        ↓
    Read current To / Cc / Bcc recipients
         ↓
    Select trackable recipient
         ↓
-   Create tracking record in Tarifast / Wix
+   Create / reuse tracking record in Tarifast / Wix
         ↓
    Receive unique pixel URL
         ↓
    Register invisible pixel with appendOnSendAsync
         ↓
    Outlook sends normally
-        ↓
-   Recipient opens message
-        ↓
-   Wix emailOpen endpoint records the open
 
    IMPORTANT
    ------------------------------------------------------------
@@ -28,27 +26,76 @@
    - NO send blocking
    - Tracking failures must never prevent email use
    - Uses the handler name already proven with v11 manifest
+   - composeId remains stable for this compose runtime
 ============================================================ */
 
 (function () {
   "use strict";
 
-  const VERSION = "PRODUCTION-1";
+  const VERSION = "PRODUCTION-2";
 
   const TRACKING_CREATE_URL =
     "https://www.tarifastops.com/_functions/emailTrackingCreate";
 
+
+  /* ============================================================
+     COMPOSE SESSION STATE
+  ============================================================ */
+
   /*
-   * Prevent duplicate work while Outlook repeatedly fires
-   * recipient-change events for the same compose session.
+   * One stable ID for this JavaScript runtime / compose session.
+   *
+   * Wix will use this in the next step to ensure repeated
+   * recipient-change events reuse one EmailTracking record
+   * instead of inserting duplicate/orphan records.
+   */
+  const composeId = createComposeId();
+
+  /*
+   * Prevent overlapping recipient-change processing.
    */
   let operationInProgress = false;
 
   /*
-   * Remember the recipient set for which the current tracking
-   * pixel was created.
+   * Remember the recipient set already armed during this runtime.
    */
   let trackedRecipientKey = null;
+
+  /*
+   * Remember the tracking record returned by Wix.
+   *
+   * Once the Wix endpoint becomes composeId-aware, repeated
+   * create requests for this composeId will return the same
+   * tracking record.
+   */
+  let currentTracking = null;
+
+
+  /* ============================================================
+     COMPOSE ID
+  ============================================================ */
+
+  function createComposeId() {
+    try {
+      if (
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+      ) {
+        return crypto.randomUUID();
+      }
+    } catch (_) {
+      // Fall through to compatibility generator.
+    }
+
+    return (
+      "tf-" +
+      Date.now().toString(36) +
+      "-" +
+      Math.random().toString(36).slice(2, 12) +
+      "-" +
+      Math.random().toString(36).slice(2, 12)
+    );
+  }
 
 
   /* ============================================================
@@ -89,11 +136,17 @@
 
   function completeEvent(event) {
     try {
-      if (event && typeof event.completed === "function") {
+      if (
+        event &&
+        typeof event.completed === "function"
+      ) {
         event.completed();
       }
     } catch (error) {
-      log("event.completed ERROR", String(error));
+      log(
+        "event.completed ERROR",
+        String(error)
+      );
     }
   }
 
@@ -108,7 +161,8 @@
         invoker(function (result) {
           if (
             result &&
-            result.status === Office.AsyncResultStatus.Succeeded
+            result.status ===
+              Office.AsyncResultStatus.Succeeded
           ) {
             resolve(result.value);
             return;
@@ -123,6 +177,7 @@
 
           reject(new Error(message));
         });
+
       } catch (error) {
         reject(error);
       }
@@ -143,26 +198,36 @@
     }
 
     try {
-      const recipients = await officeAsync(function (callback) {
-        recipientField.getAsync(callback);
-      });
+      const recipients =
+        await officeAsync(function (callback) {
+          recipientField.getAsync(callback);
+        });
 
-      return Array.isArray(recipients) ? recipients : [];
+      return Array.isArray(recipients)
+        ? recipients
+        : [];
+
     } catch (error) {
-      log("RECIPIENT READ ERROR", String(error));
+      log(
+        "RECIPIENT READ ERROR",
+        String(error)
+      );
+
       return [];
     }
   }
 
 
   async function getAllRecipients() {
-    const item = Office.context.mailbox.item;
+    const item =
+      Office.context.mailbox.item;
 
-    const results = await Promise.all([
-      getRecipients(item.to),
-      getRecipients(item.cc),
-      getRecipients(item.bcc)
-    ]);
+    const results =
+      await Promise.all([
+        getRecipients(item.to),
+        getRecipients(item.cc),
+        getRecipients(item.bcc)
+      ]);
 
     return []
       .concat(results[0])
@@ -179,29 +244,39 @@
 
 
   function uniqueRecipients(recipients) {
-    const seen = Object.create(null);
+    const seen =
+      Object.create(null);
 
-    return recipients.filter(function (recipient) {
-      const email = normalizeEmail(recipient.emailAddress);
+    return recipients.filter(
+      function (recipient) {
+        const email =
+          normalizeEmail(
+            recipient.emailAddress
+          );
 
-      if (!email || seen[email]) {
-        return false;
+        if (
+          !email ||
+          seen[email]
+        ) {
+          return false;
+        }
+
+        seen[email] = true;
+
+        return true;
       }
-
-      seen[email] = true;
-      return true;
-    });
+    );
   }
 
 
   /*
-   * For the first production version, one tracking pixel is
-   * associated with the first resolved recipient.
-   *
-   * This avoids creating multiple pixels/records while we're
-   * validating the complete Outlook → Wix → open pipeline.
+   * Current production behavior:
+   * one tracking record / pixel follows the first
+   * resolved recipient.
    */
-  function selectTrackingRecipient(recipients) {
+  function selectTrackingRecipient(
+    recipients
+  ) {
     if (!recipients.length) {
       return null;
     }
@@ -210,10 +285,14 @@
   }
 
 
-  function buildRecipientKey(recipients) {
+  function buildRecipientKey(
+    recipients
+  ) {
     return recipients
       .map(function (recipient) {
-        return normalizeEmail(recipient.emailAddress);
+        return normalizeEmail(
+          recipient.emailAddress
+        );
       })
       .filter(Boolean)
       .sort()
@@ -226,60 +305,93 @@
   ============================================================ */
 
   async function getSubject() {
-    const item = Office.context.mailbox.item;
+    const item =
+      Office.context.mailbox.item;
 
     if (
       !item.subject ||
-      typeof item.subject.getAsync !== "function"
+      typeof item.subject.getAsync !==
+        "function"
     ) {
       return "";
     }
 
     try {
-      const subject = await officeAsync(function (callback) {
-        item.subject.getAsync(callback);
-      });
+      const subject =
+        await officeAsync(
+          function (callback) {
+            item.subject.getAsync(
+              callback
+            );
+          }
+        );
 
-      return String(subject || "");
+      return String(
+        subject || ""
+      );
+
     } catch (error) {
-      log("SUBJECT READ ERROR", String(error));
+      log(
+        "SUBJECT READ ERROR",
+        String(error)
+      );
+
       return "";
     }
   }
 
 
   /* ============================================================
-     CREATE TRACKING RECORD
+     CREATE / REUSE TRACKING RECORD
   ============================================================ */
 
-  async function createTrackingRecord(recipient, subject) {
+  async function createTrackingRecord(
+    recipient,
+    subject
+  ) {
     const payload = {
-      recipientEmail: normalizeEmail(
-        recipient.emailAddress
-      ),
+      composeId: composeId,
 
-      recipientName: String(
-        recipient.displayName || ""
-      ).trim(),
+      recipientEmail:
+        normalizeEmail(
+          recipient.emailAddress
+        ),
+
+      recipientName:
+        String(
+          recipient.displayName || ""
+        ).trim(),
 
       company: "",
 
-      subject: String(subject || "").trim(),
+      subject:
+        String(
+          subject || ""
+        ).trim(),
 
       messageId: ""
     };
 
-    log("CREATING TRACKING RECORD", payload);
+    log(
+      "CREATING OR REUSING TRACKING RECORD",
+      payload
+    );
 
-    const response = await fetch(TRACKING_CREATE_URL, {
-      method: "POST",
+    const response =
+      await fetch(
+        TRACKING_CREATE_URL,
+        {
+          method: "POST",
 
-      headers: {
-        "Content-Type": "application/json"
-      },
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-      body: JSON.stringify(payload)
-    });
+          body:
+            JSON.stringify(payload)
+        }
+      );
 
     if (!response.ok) {
       throw new Error(
@@ -290,7 +402,8 @@
       );
     }
 
-    const result = await response.json();
+    const result =
+      await response.json();
 
     if (
       !result ||
@@ -302,11 +415,18 @@
       );
     }
 
-    log("TRACKING RECORD CREATED", {
-      id: result.id,
-      trackingId: result.trackingId,
-      pixelUrl: result.pixelUrl
-    });
+    log(
+      "TRACKING RECORD READY",
+      {
+        id: result.id,
+        trackingId:
+          result.trackingId,
+        pixelUrl:
+          result.pixelUrl,
+        composeId:
+          composeId
+      }
+    );
 
     return result;
   }
@@ -316,12 +436,15 @@
      PIXEL HTML
   ============================================================ */
 
-  function buildPixelHtml(pixelUrl) {
-    const safeUrl = String(pixelUrl || "")
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+  function buildPixelHtml(
+    pixelUrl
+  ) {
+    const safeUrl =
+      String(pixelUrl || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
     return (
       '<img src="' +
@@ -337,86 +460,115 @@
      APPEND PIXEL ON SEND
   ============================================================ */
 
-  async function registerPixelOnSend(pixelUrl) {
-    const item = Office.context.mailbox.item;
+  async function registerPixelOnSend(
+    pixelUrl
+  ) {
+    const item =
+      Office.context.mailbox.item;
 
     if (
       !item.body ||
-      typeof item.body.appendOnSendAsync !== "function"
+      typeof item.body.appendOnSendAsync !==
+        "function"
     ) {
       throw new Error(
         "appendOnSendAsync is unavailable in this Outlook client"
       );
     }
 
-    const bodyType = await officeAsync(function (callback) {
-      item.body.getTypeAsync(callback);
-    });
+    const bodyType =
+      await officeAsync(
+        function (callback) {
+          item.body.getTypeAsync(
+            callback
+          );
+        }
+      );
 
     /*
-     * HTML pixels cannot be inserted into a plain-text body.
-     * We fail open in that scenario.
+     * HTML pixels cannot be inserted into
+     * a plain-text message body.
      */
-    if (bodyType !== Office.CoercionType.Html) {
+    if (
+      bodyType !==
+      Office.CoercionType.Html
+    ) {
       throw new Error(
         "Message body is not HTML; tracking pixel was not registered"
       );
     }
 
-    const pixelHtml = buildPixelHtml(pixelUrl);
+    const pixelHtml =
+      buildPixelHtml(
+        pixelUrl
+      );
 
-    await new Promise(function (resolve, reject) {
-      try {
-        item.body.appendOnSendAsync(
-          pixelHtml,
-          {
-            coercionType: Office.CoercionType.Html
-          },
-          function (result) {
-            if (
-              result &&
-              result.status ===
-                Office.AsyncResultStatus.Succeeded
-            ) {
-              resolve();
-              return;
+    await new Promise(
+      function (resolve, reject) {
+        try {
+          item.body.appendOnSendAsync(
+            pixelHtml,
+            {
+              coercionType:
+                Office.CoercionType.Html
+            },
+            function (result) {
+              if (
+                result &&
+                result.status ===
+                  Office.AsyncResultStatus
+                    .Succeeded
+              ) {
+                resolve();
+                return;
+              }
+
+              const message =
+                result &&
+                result.error &&
+                result.error.message
+                  ? result.error.message
+                  : "Unknown appendOnSendAsync error";
+
+              reject(
+                new Error(message)
+              );
             }
+          );
 
-            const message =
-              result &&
-              result.error &&
-              result.error.message
-                ? result.error.message
-                : "Unknown appendOnSendAsync error";
-
-            reject(new Error(message));
-          }
-        );
-      } catch (error) {
-        reject(error);
+        } catch (error) {
+          reject(error);
+        }
       }
-    });
+    );
 
-    log("TRACKING PIXEL REGISTERED FOR SEND");
+    log(
+      "TRACKING PIXEL REGISTERED FOR SEND"
+    );
   }
 
 
   /* ============================================================
      MAIN RECIPIENT-CHANGE HANDLER
 
-     This function name MUST remain synchronized with v11:
+     IMPORTANT:
+     This function name remains synchronized with
+     the proven v11 manifest:
      tarifastV10RecipientsChanged
   ============================================================ */
 
-  async function tarifastV10RecipientsChanged(event) {
-    log("RECIPIENT CHANGE FIRED");
+  async function tarifastV10RecipientsChanged(
+    event
+  ) {
+    log(
+      "RECIPIENT CHANGE FIRED"
+    );
 
-    /*
-     * If another recipient event arrives while we're processing,
-     * immediately release Outlook.
-     */
     if (operationInProgress) {
-      log("TRACKING OPERATION ALREADY IN PROGRESS");
+      log(
+        "TRACKING OPERATION ALREADY IN PROGRESS"
+      );
+
       completeEvent(event);
       return;
     }
@@ -424,28 +576,41 @@
     operationInProgress = true;
 
     try {
-      const recipients = uniqueRecipients(
-        await getAllRecipients()
-      );
+      const recipients =
+        uniqueRecipients(
+          await getAllRecipients()
+        );
 
       if (!recipients.length) {
-        log("NO RECIPIENTS — NOTHING TO TRACK");
+        log(
+          "NO RECIPIENTS — NOTHING TO TRACK"
+        );
 
         trackedRecipientKey = null;
+
+        /*
+         * Do NOT discard composeId.
+         *
+         * This is still the same compose session,
+         * even if all recipients are temporarily
+         * removed.
+         */
         return;
       }
 
       const recipientKey =
-        buildRecipientKey(recipients);
+        buildRecipientKey(
+          recipients
+        );
 
       /*
-       * Outlook can fire this event repeatedly while resolving
-       * addresses. Don't recreate the same tracking record for
-       * an unchanged recipient set during this runtime.
+       * Same recipient set during this runtime:
+       * nothing needs to be recreated or rearmed.
        */
       if (
         trackedRecipientKey &&
-        trackedRecipientKey === recipientKey
+        trackedRecipientKey ===
+          recipientKey
       ) {
         log(
           "RECIPIENT SET ALREADY TRACKED — SKIPPING"
@@ -455,52 +620,104 @@
       }
 
       const trackingRecipient =
-        selectTrackingRecipient(recipients);
+        selectTrackingRecipient(
+          recipients
+        );
 
       if (!trackingRecipient) {
-        log("NO TRACKABLE RECIPIENT FOUND");
+        log(
+          "NO TRACKABLE RECIPIENT FOUND"
+        );
+
         return;
       }
 
-      log("TRACKING RECIPIENT", {
-        email:
-          trackingRecipient.emailAddress || "",
-        name:
-          trackingRecipient.displayName || ""
-      });
+      log(
+        "TRACKING RECIPIENT",
+        {
+          email:
+            trackingRecipient
+              .emailAddress || "",
 
-      const subject = await getSubject();
+          name:
+            trackingRecipient
+              .displayName || "",
 
+          composeId:
+            composeId
+        }
+      );
+
+      const subject =
+        await getSubject();
+
+      /*
+       * After the Wix endpoint is upgraded,
+       * this call becomes an UPSERT:
+       *
+       * same composeId = same EmailTracking record.
+       */
       const tracking =
         await createTrackingRecord(
           trackingRecipient,
           subject
         );
 
-      await registerPixelOnSend(
-        tracking.pixelUrl
-      );
-
       /*
-       * Mark the recipient set only after BOTH the Wix record
-       * and Outlook append-on-send registration succeed.
+       * Avoid registering the same tracking pixel
+       * more than once when Wix returns the existing
+       * tracking record for this compose session.
+       *
+       * If this is the first successful registration,
+       * arm it now.
        */
-      trackedRecipientKey = recipientKey;
+      const alreadyRegistered =
+        currentTracking &&
+        currentTracking.trackingId &&
+        currentTracking.trackingId ===
+          tracking.trackingId;
 
-      log("TRACKING ARMED SUCCESSFULLY", {
-        trackingId: tracking.trackingId
-      });
+      if (!alreadyRegistered) {
+        await registerPixelOnSend(
+          tracking.pixelUrl
+        );
+      } else {
+        log(
+          "TRACKING PIXEL ALREADY REGISTERED — REUSING"
+        );
+      }
+
+      currentTracking =
+        tracking;
+
+      trackedRecipientKey =
+        recipientKey;
+
+      log(
+        "TRACKING ARMED SUCCESSFULLY",
+        {
+          trackingId:
+            tracking.trackingId,
+
+          composeId:
+            composeId,
+
+          recipientKey:
+            recipientKey
+        }
+      );
 
     } catch (error) {
       /*
        * FAIL OPEN.
        *
-       * Tracking problems must never interfere with normal
-       * Outlook compose/send behavior.
+       * Tracking problems must never interfere
+       * with normal Outlook compose/send behavior.
        */
       log(
         "TRACKING FAILED OPEN",
-        error && error.message
+        error &&
+        error.message
           ? error.message
           : String(error)
       );
@@ -509,7 +726,7 @@
       operationInProgress = false;
 
       /*
-       * Always release the event.
+       * Always release Outlook's event.
        */
       completeEvent(event);
     }
@@ -542,11 +759,20 @@
      NORMAL WEBVIEW INITIALIZATION DIAGNOSTIC
   ============================================================ */
 
-  Office.initialize = function () {
-    log("OFFICE INITIALIZE CALLBACK");
-  };
+  Office.initialize =
+    function () {
+      log(
+        "OFFICE INITIALIZE CALLBACK"
+      );
+    };
 
 
-  log("SCRIPT EXECUTING");
+  log(
+    "SCRIPT EXECUTING",
+    {
+      composeId:
+        composeId
+    }
+  );
 
 })();
