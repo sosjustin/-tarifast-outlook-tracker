@@ -1,6 +1,6 @@
 /* ============================================================
    TARIFAST EMAIL TRACKER
-   PIXEL-TEST-1 — HEADER + UNIQUE APPEND-ON-SEND PIXEL
+   HEADER-TEST-1 — UNIQUE TRACKING ID VIA INTERNET HEADER
 
    ARCHITECTURE
    ------------------------------------------------------------
@@ -19,33 +19,25 @@
    Stamp:
    X-Tarifast-Tracking-ID: <trackingId>
         ↓
-   Register unique tracking pixel with appendOnSendAsync
-        ↓
    Outlook sends normally
-        ↓
-   Pixel is appended only when the message is sent
 
    IMPORTANT
    ------------------------------------------------------------
    - NO OnMessageSend
-   - NO Smart Alerts
+   - NO appendOnSendAsync
+   - NO pixel inserted into message body
    - NO send blocking
-   - Exchange tracking rule remains DISABLED
    - Tracking failures must never prevent email use
-   - Wix remains in diagnostic IMAGE_FETCHED mode
-   - Uses handler name already proven with v11 manifest
+   - Uses the handler name already proven with v11 manifest
 ============================================================ */
 
 (function () {
   "use strict";
 
-  const VERSION = "PIXEL-TEST-1";
+  const VERSION = "HEADER-TEST-1";
 
   const TRACKING_CREATE_URL =
     "https://www.tarifastops.com/_functions/emailTrackingCreate";
-
-  const TRACKING_OPEN_URL =
-    "https://www.tarifastops.com/_functions/emailOpen";
 
   const TRACKING_HEADER =
     "X-Tarifast-Tracking-ID";
@@ -62,15 +54,6 @@
   let trackedRecipientKey = null;
 
   let currentTracking = null;
-
-  /*
-   * Tracks the exact trackingId currently registered
-   * with appendOnSendAsync.
-   *
-   * This prevents repeated recipient-change events from
-   * registering the same pixel over and over.
-   */
-  let registeredPixelTrackingId = null;
 
 
   /* ============================================================
@@ -552,207 +535,6 @@
 
 
   /* ============================================================
-     BUILD UNIQUE TRACKING PIXEL
-  ============================================================ */
-
-  function buildTrackingPixelHtml(
-    trackingId
-  ) {
-    const cleanTrackingId =
-      String(trackingId || "").trim();
-
-    if (!cleanTrackingId) {
-      throw new Error(
-        "Cannot build tracking pixel without a trackingId"
-      );
-    }
-
-    const pixelUrl =
-      TRACKING_OPEN_URL +
-      "?t=" +
-      encodeURIComponent(
-        cleanTrackingId
-      );
-
-    /*
-     * Intentionally tiny and visually inert.
-     *
-     * Wix is currently diagnostic-only:
-     * a request should record IMAGE_FETCHED telemetry,
-     * NOT blindly increment a human-open count.
-     */
-    return (
-      '<img src="' +
-      pixelUrl +
-      '" ' +
-      'width="1" ' +
-      'height="1" ' +
-      'style="width:1px;height:1px;border:0;display:block;opacity:0;" ' +
-      'alt="">'
-    );
-  }
-
-
-  /* ============================================================
-     REGISTER PIXEL FOR APPEND ON SEND
-  ============================================================ */
-
-  async function registerPixelOnSend(
-    trackingId
-  ) {
-    const item =
-      Office.context.mailbox.item;
-
-    const cleanTrackingId =
-      String(trackingId || "").trim();
-
-    if (!cleanTrackingId) {
-      throw new Error(
-        "Cannot register tracking pixel without a trackingId"
-      );
-    }
-
-    /*
-     * If this exact trackingId is already registered,
-     * do not register it again.
-     */
-    if (
-      registeredPixelTrackingId ===
-        cleanTrackingId
-    ) {
-      log(
-        "PIXEL ALREADY REGISTERED — SKIPPING",
-        {
-          trackingId:
-            cleanTrackingId
-        }
-      );
-
-      return;
-    }
-
-    if (
-      !item.body ||
-      typeof item.body.getTypeAsync !==
-        "function"
-    ) {
-      throw new Error(
-        "body.getTypeAsync is unavailable in this Outlook client"
-      );
-    }
-
-    if (
-      typeof item.body.appendOnSendAsync !==
-        "function"
-    ) {
-      throw new Error(
-        "body.appendOnSendAsync is unavailable in this Outlook client"
-      );
-    }
-
-    /*
-     * Microsoft recommends reading the current body format
-     * first, then passing that format to appendOnSendAsync.
-     */
-    const bodyType =
-      await officeAsync(
-        function (callback) {
-          item.body.getTypeAsync(
-            callback
-          );
-        }
-      );
-
-    let pixelContent;
-
-    /*
-     * HTML tracking requires an <img>.
-     *
-     * If Outlook somehow gives us a plain-text body,
-     * do NOT attempt to force HTML into it.
-     * Fail the tracking registration open instead of
-     * affecting the user's message.
-     */
-    if (
-      bodyType !==
-        Office.CoercionType.Html
-    ) {
-      throw new Error(
-        "Tracking pixel not registered because message body is not HTML"
-      );
-    }
-
-    pixelContent =
-      buildTrackingPixelHtml(
-        cleanTrackingId
-      );
-
-    await new Promise(
-      function (resolve, reject) {
-        try {
-          item.body.appendOnSendAsync(
-            pixelContent,
-            {
-              coercionType:
-                bodyType
-            },
-            function (result) {
-              if (
-                result &&
-                result.status ===
-                  Office.AsyncResultStatus.Succeeded
-              ) {
-                resolve();
-                return;
-              }
-
-              const message =
-                result &&
-                result.error &&
-                result.error.message
-                  ? result.error.message
-                  : "Unknown appendOnSendAsync error";
-
-              reject(
-                new Error(message)
-              );
-            }
-          );
-
-        } catch (error) {
-          reject(error);
-        }
-      }
-    );
-
-    /*
-     * Only mark the trackingId registered AFTER
-     * Outlook confirms appendOnSendAsync succeeded.
-     */
-    registeredPixelTrackingId =
-      cleanTrackingId;
-
-    log(
-      "PIXEL REGISTERED FOR APPEND ON SEND",
-      {
-        trackingId:
-          cleanTrackingId,
-
-        bodyType:
-          bodyType,
-
-        pixelUrl:
-          TRACKING_OPEN_URL +
-          "?t=" +
-          encodeURIComponent(
-            cleanTrackingId
-          )
-      }
-    );
-  }
-
-
-  /* ============================================================
      MAIN RECIPIENT-CHANGE HANDLER
 
      Function name intentionally remains synchronized
@@ -849,22 +631,15 @@
         );
 
       /*
-       * Keep the working custom header.
+       * No image is placed in the message body.
+       * Only the unique Wix tracking ID is attached
+       * as a custom Internet header.
        */
       await setTrackingHeader(
         tracking.trackingId
       );
 
       await verifyTrackingHeader(
-        tracking.trackingId
-      );
-
-      /*
-       * Register the SAME unique trackingId as a
-       * tracking pixel that Outlook will append
-       * only when the message is sent.
-       */
-      await registerPixelOnSend(
         tracking.trackingId
       );
 
@@ -875,7 +650,7 @@
         recipientKey;
 
       log(
-        "TRACKING PREPARED SUCCESSFULLY",
+        "TRACKING ID ATTACHED SUCCESSFULLY",
         {
           trackingId:
             tracking.trackingId,
@@ -887,10 +662,7 @@
             recipientKey,
 
           header:
-            TRACKING_HEADER,
-
-          pixelRegistered:
-            true
+            TRACKING_HEADER
         }
       );
 
