@@ -1,6 +1,6 @@
 /* ============================================================
    TARIFAST EMAIL TRACKER
-   PRODUCTION-2 — COMPOSE SESSION ID + APPEND ON SEND
+   HEADER-TEST-1 — UNIQUE TRACKING ID VIA INTERNET HEADER
 
    ARCHITECTURE
    ------------------------------------------------------------
@@ -14,60 +14,45 @@
         ↓
    Create / reuse tracking record in Tarifast / Wix
         ↓
-   Receive unique pixel URL
+   Receive unique trackingId
         ↓
-   Register invisible pixel with appendOnSendAsync
+   Stamp:
+   X-Tarifast-Tracking-ID: <trackingId>
         ↓
    Outlook sends normally
 
    IMPORTANT
    ------------------------------------------------------------
    - NO OnMessageSend
+   - NO appendOnSendAsync
+   - NO pixel inserted into message body
    - NO send blocking
    - Tracking failures must never prevent email use
    - Uses the handler name already proven with v11 manifest
-   - composeId remains stable for this compose runtime
 ============================================================ */
 
 (function () {
   "use strict";
 
-  const VERSION = "PRODUCTION-2";
+  const VERSION = "HEADER-TEST-1";
 
   const TRACKING_CREATE_URL =
     "https://www.tarifastops.com/_functions/emailTrackingCreate";
+
+  const TRACKING_HEADER =
+    "X-Tarifast-Tracking-ID";
 
 
   /* ============================================================
      COMPOSE SESSION STATE
   ============================================================ */
 
-  /*
-   * One stable ID for this JavaScript runtime / compose session.
-   *
-   * Wix will use this in the next step to ensure repeated
-   * recipient-change events reuse one EmailTracking record
-   * instead of inserting duplicate/orphan records.
-   */
   const composeId = createComposeId();
 
-  /*
-   * Prevent overlapping recipient-change processing.
-   */
   let operationInProgress = false;
 
-  /*
-   * Remember the recipient set already armed during this runtime.
-   */
   let trackedRecipientKey = null;
 
-  /*
-   * Remember the tracking record returned by Wix.
-   *
-   * Once the Wix endpoint becomes composeId-aware, repeated
-   * create requests for this composeId will return the same
-   * tracking record.
-   */
   let currentTracking = null;
 
 
@@ -83,9 +68,7 @@
       ) {
         return crypto.randomUUID();
       }
-    } catch (_) {
-      // Fall through to compatibility generator.
-    }
+    } catch (_) {}
 
     return (
       "tf-" +
@@ -124,9 +107,7 @@
             message
         );
       }
-    } catch (_) {
-      // Logging must never interfere with Outlook.
-    }
+    } catch (_) {}
   }
 
 
@@ -269,14 +250,7 @@
   }
 
 
-  /*
-   * Current production behavior:
-   * one tracking record / pixel follows the first
-   * resolved recipient.
-   */
-  function selectTrackingRecipient(
-    recipients
-  ) {
+  function selectTrackingRecipient(recipients) {
     if (!recipients.length) {
       return null;
     }
@@ -285,9 +259,7 @@
   }
 
 
-  function buildRecipientKey(
-    recipients
-  ) {
+  function buildRecipientKey(recipients) {
     return recipients
       .map(function (recipient) {
         return normalizeEmail(
@@ -310,25 +282,18 @@
 
     if (
       !item.subject ||
-      typeof item.subject.getAsync !==
-        "function"
+      typeof item.subject.getAsync !== "function"
     ) {
       return "";
     }
 
     try {
       const subject =
-        await officeAsync(
-          function (callback) {
-            item.subject.getAsync(
-              callback
-            );
-          }
-        );
+        await officeAsync(function (callback) {
+          item.subject.getAsync(callback);
+        });
 
-      return String(
-        subject || ""
-      );
+      return String(subject || "");
 
     } catch (error) {
       log(
@@ -408,7 +373,7 @@
     if (
       !result ||
       result.success !== true ||
-      !result.pixelUrl
+      !result.trackingId
     ) {
       throw new Error(
         "Tracking endpoint returned an invalid response"
@@ -421,8 +386,6 @@
         id: result.id,
         trackingId:
           result.trackingId,
-        pixelUrl:
-          result.pixelUrl,
         composeId:
           composeId
       }
@@ -433,91 +396,49 @@
 
 
   /* ============================================================
-     PIXEL HTML
+     STAMP TRACKING ID INTO INTERNET HEADER
   ============================================================ */
 
-  function buildPixelHtml(
-    pixelUrl
-  ) {
-    const safeUrl =
-      String(pixelUrl || "")
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    return (
-      '<img src="' +
-      safeUrl +
-      '" width="1" height="1" ' +
-      'style="width:1px;height:1px;border:0;' +
-      'display:block;opacity:0;" alt="">'
-    );
-  }
-
-
-  /* ============================================================
-     APPEND PIXEL ON SEND
-  ============================================================ */
-
-  async function registerPixelOnSend(
-    pixelUrl
+  async function setTrackingHeader(
+    trackingId
   ) {
     const item =
       Office.context.mailbox.item;
 
     if (
-      !item.body ||
-      typeof item.body.appendOnSendAsync !==
+      !item.internetHeaders ||
+      typeof item.internetHeaders.setAsync !==
         "function"
     ) {
       throw new Error(
-        "appendOnSendAsync is unavailable in this Outlook client"
+        "internetHeaders.setAsync is unavailable in this Outlook client"
       );
     }
 
-    const bodyType =
-      await officeAsync(
-        function (callback) {
-          item.body.getTypeAsync(
-            callback
-          );
-        }
-      );
+    const cleanTrackingId =
+      String(trackingId || "").trim();
 
-    /*
-     * HTML pixels cannot be inserted into
-     * a plain-text message body.
-     */
-    if (
-      bodyType !==
-      Office.CoercionType.Html
-    ) {
+    if (!cleanTrackingId) {
       throw new Error(
-        "Message body is not HTML; tracking pixel was not registered"
+        "Cannot set tracking header without a trackingId"
       );
     }
 
-    const pixelHtml =
-      buildPixelHtml(
-        pixelUrl
-      );
+    const headers = {};
+
+    headers[TRACKING_HEADER] =
+      cleanTrackingId;
 
     await new Promise(
       function (resolve, reject) {
         try {
-          item.body.appendOnSendAsync(
-            pixelHtml,
-            {
-              coercionType:
-                Office.CoercionType.Html
-            },
+          item.internetHeaders.setAsync(
+            headers,
             function (result) {
               if (
                 result &&
                 result.status ===
-                  Office.AsyncResultStatus
-                    .Succeeded
+                  Office.AsyncResultStatus.Succeeded
               ) {
                 resolve();
                 return;
@@ -528,7 +449,7 @@
                 result.error &&
                 result.error.message
                   ? result.error.message
-                  : "Unknown appendOnSendAsync error";
+                  : "Unknown internetHeaders.setAsync error";
 
               reject(
                 new Error(message)
@@ -543,18 +464,81 @@
     );
 
     log(
-      "TRACKING PIXEL REGISTERED FOR SEND"
+      "TRACKING HEADER SET",
+      {
+        header:
+          TRACKING_HEADER,
+        trackingId:
+          cleanTrackingId
+      }
     );
+  }
+
+
+  /* ============================================================
+     VERIFY HEADER IN CURRENT COMPOSE ITEM
+  ============================================================ */
+
+  async function verifyTrackingHeader(
+    expectedTrackingId
+  ) {
+    const item =
+      Office.context.mailbox.item;
+
+    if (
+      !item.internetHeaders ||
+      typeof item.internetHeaders.getAsync !==
+        "function"
+    ) {
+      log(
+        "HEADER VERIFY UNAVAILABLE"
+      );
+
+      return;
+    }
+
+    try {
+      const result =
+        await officeAsync(
+          function (callback) {
+            item.internetHeaders.getAsync(
+              [TRACKING_HEADER],
+              callback
+            );
+          }
+        );
+
+      log(
+        "TRACKING HEADER VERIFIED",
+        {
+          expected:
+            expectedTrackingId,
+          actual:
+            result &&
+            result[TRACKING_HEADER]
+              ? result[TRACKING_HEADER]
+              : ""
+        }
+      );
+
+    } catch (error) {
+      /*
+       * Verification is diagnostic only.
+       * Header set success remains authoritative.
+       */
+      log(
+        "HEADER VERIFY ERROR",
+        String(error)
+      );
+    }
   }
 
 
   /* ============================================================
      MAIN RECIPIENT-CHANGE HANDLER
 
-     IMPORTANT:
-     This function name remains synchronized with
-     the proven v11 manifest:
-     tarifastV10RecipientsChanged
+     Function name intentionally remains synchronized
+     with the proven v11 manifest.
   ============================================================ */
 
   async function tarifastV10RecipientsChanged(
@@ -588,13 +572,6 @@
 
         trackedRecipientKey = null;
 
-        /*
-         * Do NOT discard composeId.
-         *
-         * This is still the same compose session,
-         * even if all recipients are temporarily
-         * removed.
-         */
         return;
       }
 
@@ -603,10 +580,6 @@
           recipients
         );
 
-      /*
-       * Same recipient set during this runtime:
-       * nothing needs to be recreated or rearmed.
-       */
       if (
         trackedRecipientKey &&
         trackedRecipientKey ===
@@ -651,12 +624,6 @@
       const subject =
         await getSubject();
 
-      /*
-       * After the Wix endpoint is upgraded,
-       * this call becomes an UPSERT:
-       *
-       * same composeId = same EmailTracking record.
-       */
       const tracking =
         await createTrackingRecord(
           trackingRecipient,
@@ -664,28 +631,19 @@
         );
 
       /*
-       * Avoid registering the same tracking pixel
-       * more than once when Wix returns the existing
-       * tracking record for this compose session.
+       * THIS REPLACES appendOnSendAsync.
        *
-       * If this is the first successful registration,
-       * arm it now.
+       * No image is placed in the message body.
+       * Only the unique Wix tracking ID is attached
+       * as a custom Internet header.
        */
-      const alreadyRegistered =
-        currentTracking &&
-        currentTracking.trackingId &&
-        currentTracking.trackingId ===
-          tracking.trackingId;
+      await setTrackingHeader(
+        tracking.trackingId
+      );
 
-      if (!alreadyRegistered) {
-        await registerPixelOnSend(
-          tracking.pixelUrl
-        );
-      } else {
-        log(
-          "TRACKING PIXEL ALREADY REGISTERED — REUSING"
-        );
-      }
+      await verifyTrackingHeader(
+        tracking.trackingId
+      );
 
       currentTracking =
         tracking;
@@ -694,7 +652,7 @@
         recipientKey;
 
       log(
-        "TRACKING ARMED SUCCESSFULLY",
+        "TRACKING ID ATTACHED SUCCESSFULLY",
         {
           trackingId:
             tracking.trackingId,
@@ -703,7 +661,10 @@
             composeId,
 
           recipientKey:
-            recipientKey
+            recipientKey,
+
+          header:
+            TRACKING_HEADER
         }
       );
 
@@ -725,9 +686,6 @@
     } finally {
       operationInProgress = false;
 
-      /*
-       * Always release Outlook's event.
-       */
       completeEvent(event);
     }
   }
